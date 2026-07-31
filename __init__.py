@@ -5,15 +5,25 @@ from server import PromptServer
 NODE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIRECTORY = "./web"
 
-CONFIG_FILE = os.path.join(os.path.expanduser('~'), '.hf_downloader_config.json')
+import folder_paths
 
-DEFAULT_DIRS = {
-    'loras': ['LoRAs', r'J:\Comfyui\AG COMFY\ComfyUI\models\loras'],
-    'diffusion_models': ['Diffusion Models', r'J:\Comfyui\AG COMFY\ComfyUI\models\diffusion_models'],
-    'checkpoints': ['Checkpoints', r'J:\Comfyui\AG COMFY\ComfyUI\models\checkpoints'],
-    'vae': ['VAEs', r'J:\Comfyui\AG COMFY\ComfyUI\models\vae'],
-    'controlnet': ['ControlNet', r'J:\Comfyui\AG COMFY\ComfyUI\models\controlnet']
-}
+def get_default_dirs():
+    def _get(cat):
+        try:
+            p = folder_paths.get_folder_paths(cat)
+            if p and len(p) > 0:
+                return p[0]
+        except Exception:
+            pass
+        return os.path.abspath(os.path.join(NODE_DIR, "..", "..", "models", cat))
+
+    return {
+        'loras': ['LoRAs', _get('loras')],
+        'diffusion_models': ['Diffusion Models', _get('diffusion_models')],
+        'checkpoints': ['Checkpoints', _get('checkpoints')],
+        'vae': ['VAEs', _get('vae')],
+        'controlnet': ['ControlNet', _get('controlnet')]
+    }
 
 POPULAR_REPOS = [
     'Kijai/LTX2.3_comfy',
@@ -40,7 +50,7 @@ def norm(s):
     return re.sub(r'[\-_]', '', s.lower())
 
 def load_dirs():
-    dirs = dict(DEFAULT_DIRS)
+    dirs = dict(get_default_dirs())
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
