@@ -3,13 +3,96 @@ import { app } from "../../scripts/app.js";
 app.registerExtension({
     name: "ComfyUI.HFSuperDownloader",
     async setup() {
-        console.log("[HF SuperDownloader] Initializing Web Extension...");
+        console.log("[HF SuperDownloader] Initializing Web Extension with i18n support...");
         createFloatingButton();
     }
 });
 
 let modalContainer = null;
 let pollInterval = null;
+
+// i18n Translations Dictionary
+const i18n = {
+    es: {
+        title: "Hugging Face SuperDownloader",
+        tooltip: "Hugging Face Downloader (Mover: arrastrar centro | Escalar: arrastrar bordes/esquinas)",
+        tabDownload: "⚡ Descargar Modelo",
+        tabConfig: "⚙️ Gestionar Directorios",
+        targetFolder: "📁 Carpeta de Destino en ComfyUI:",
+        urlOrFilename: "🔗 URL de Hugging Face o Nombre del Archivo:",
+        placeholderInput: "Ej: ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+        btnSearch: "🔍 Buscar",
+        btnDownload: "⚡ Descargar a Máxima Velocidad (hf_transfer)",
+        terminalLog: "💻 Terminal Log en Tiempo Real:",
+        searching: "⏳ Buscando en Hugging Face...",
+        found: "✔ Encontrado:",
+        readyLog: "Ready. Ingresa un enlace o nombre de archivo para comenzar.",
+        rootTitle: "🏠 Directorio Raíz de ComfyUI (Auto-detectar carpetas):",
+        btnAutoDetect: "🔍 Auto-Detectar Subcarpetas",
+        availableFolders: "Carpetas de Destino Disponibles:",
+        addEditFolder: "➕ Añadir / Editar Carpeta Personalizada:",
+        placeholderName: "Nombre descriptivo (ej: Text Encoders)",
+        placeholderPath: "Ruta absoluta (ej: C:\\ComfyUI\\models\\text_encoders)",
+        btnSave: "Guardar Carpeta",
+        btnCancel: "Cancelar",
+        btnEdit: "✏️ Editar",
+        btnDelete: "🗑️ Borrar",
+        confirmDelete: '¿Eliminar la carpeta "{name}" de la lista?',
+        alertFillFields: "Completa el nombre y la ruta de la carpeta.",
+        alertValidRoot: "Ingresa un directorio de ComfyUI válido.",
+        alertRootSuccess: "✔ Directorio de ComfyUI actualizado y subcarpetas auto-detectadas con éxito!",
+        alertNotFound: "No se pudo resolver el repositorio de Hugging Face. Verifica el nombre."
+    },
+    en: {
+        title: "Hugging Face SuperDownloader",
+        tooltip: "Hugging Face Downloader (Move: drag center | Scale: drag corners)",
+        tabDownload: "⚡ Download Model",
+        tabConfig: "⚙️ Manage Directories",
+        targetFolder: "📁 Target ComfyUI Folder:",
+        urlOrFilename: "🔗 Hugging Face URL or Filename:",
+        placeholderInput: "E.g. ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+        btnSearch: "🔍 Search",
+        btnDownload: "⚡ Download at Max Speed (hf_transfer)",
+        terminalLog: "💻 Real-Time Terminal Log:",
+        searching: "⏳ Searching Hugging Face...",
+        found: "✔ Found:",
+        readyLog: "Ready. Enter a link or filename to start.",
+        rootTitle: "🏠 ComfyUI Base Root Directory (Auto-detect folders):",
+        btnAutoDetect: "🔍 Auto-Detect Subfolders",
+        availableFolders: "Available Destination Folders:",
+        addEditFolder: "➕ Add / Edit Custom Folder:",
+        placeholderName: "Descriptive name (e.g. Text Encoders)",
+        placeholderPath: "Absolute path (e.g. C:\\ComfyUI\\models\\text_encoders)",
+        btnSave: "Save Folder",
+        btnCancel: "Cancel",
+        btnEdit: "✏️ Edit",
+        btnDelete: "🗑️ Delete",
+        confirmDelete: 'Delete folder "{name}" from the list?',
+        alertFillFields: "Please fill out both the name and folder path.",
+        alertValidRoot: "Please enter a valid ComfyUI root directory.",
+        alertRootSuccess: "✔ ComfyUI root directory updated and subfolders auto-detected successfully!",
+        alertNotFound: "Could not resolve Hugging Face repository. Check the filename or URL."
+    }
+};
+
+function getLang() {
+    try {
+        const comfyLang = app?.ui?.settings?.getSettingValue?.("Comfy.Lang");
+        if (comfyLang && comfyLang.toLowerCase().startsWith("es")) return "es";
+    } catch(e) {}
+    const navLang = navigator.language || navigator.userLanguage || "";
+    if (navLang.toLowerCase().startsWith("es")) return "es";
+    return "en";
+}
+
+function t(key, params = {}) {
+    const lang = getLang();
+    let text = (i18n[lang] && i18n[lang][key]) || i18n["en"][key] || key;
+    for (const [k, v] of Object.entries(params)) {
+        text = text.replace(`{${k}}`, v);
+    }
+    return text;
+}
 
 function createFloatingButton() {
     if (document.getElementById("hf-superdownloader-fab")) {
@@ -18,16 +101,14 @@ function createFloatingButton() {
 
     const btn = document.createElement("div");
     btn.id = "hf-superdownloader-fab";
-    btn.title = "Hugging Face Downloader (Mover: arrastrar centro | Escalar: arrastrar bordes/esquinas)";
+    btn.title = t("tooltip");
     
-    // Restore saved size or default
     let savedSize = 54;
     try {
         const s = parseInt(localStorage.getItem("hf_fab_size"));
         if (s && s >= 30 && s <= 160) savedSize = s;
     } catch(e) {}
 
-    // Restore saved position or default to bottom-right
     let savedPos = null;
     try {
         const raw = localStorage.getItem("hf_fab_position");
@@ -99,7 +180,6 @@ function createFloatingButton() {
         btn.appendChild(handle);
     });
 
-    // Show handles on hover
     btn.onmouseenter = () => {
         btn.querySelectorAll(".hf-resize-handle").forEach(h => h.style.opacity = "1");
         btn.style.transform = "scale(1.05)";
@@ -111,7 +191,6 @@ function createFloatingButton() {
         btn.style.boxShadow = "0 4px 18px rgba(0, 0, 0, 0.7)";
     };
 
-    // Interactivity: Move & Resize Logic
     let isDraggingMove = false;
     let isDraggingResize = false;
     let activeHandle = null;
@@ -249,43 +328,43 @@ async function openModal() {
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2a3d; padding-bottom: 14px;">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <img src="/extensions/ComfyUI-HF-SuperDownloader/hf_icon.png?v=${Date.now()}" style="width: 32px; height: 32px; border-radius: 50%;" />
-                <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">Hugging Face SuperDownloader</h2>
+                <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">${t("title")}</h2>
             </div>
             <button id="hf-close-btn" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer; transition: color 0.2s;">✕</button>
         </div>
 
         <!-- Navigation Tabs -->
         <div style="display: flex; gap: 10px; border-bottom: 1px solid #2a2a3d; padding-bottom: 10px;">
-            <button id="tab-download-btn" style="padding: 8px 16px; background: #2a2a40; border: 1px solid #444466; border-radius: 8px; color: #ffbd2e; font-size: 14px; font-weight: 600; cursor: pointer;">⚡ Descargar Modelo</button>
-            <button id="tab-config-btn" style="padding: 8px 16px; background: #1a1a28; border: 1px solid #33334d; border-radius: 8px; color: #aaa; font-size: 14px; font-weight: 600; cursor: pointer;">⚙️ Gestionar Directorios</button>
+            <button id="tab-download-btn" style="padding: 8px 16px; background: #2a2a40; border: 1px solid #444466; border-radius: 8px; color: #ffbd2e; font-size: 14px; font-weight: 600; cursor: pointer;">${t("tabDownload")}</button>
+            <button id="tab-config-btn" style="padding: 8px 16px; background: #1a1a28; border: 1px solid #33334d; border-radius: 8px; color: #aaa; font-size: 14px; font-weight: 600; cursor: pointer;">${t("tabConfig")}</button>
         </div>
 
         <!-- TAB 1: DOWNLOAD -->
         <div id="tab-download-content" style="display: flex; flex-direction: column; gap: 14px;">
             <div>
-                <label style="display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 6px;">📁 Carpeta de Destino en ComfyUI:</label>
+                <label style="display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 6px;">${t("targetFolder")}</label>
                 <select id="hf-folder-select" style="width: 100%; padding: 10px 14px; background: #0d0d15; border: 1px solid #33334d; border-radius: 8px; color: #fff; font-size: 14px; outline: none; cursor: pointer;"></select>
             </div>
 
             <div>
-                <label style="display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 6px;">🔗 URL de Hugging Face o Nombre del Archivo:</label>
+                <label style="display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 6px;">${t("urlOrFilename")}</label>
                 <div style="display: flex; gap: 8px;">
-                    <input id="hf-url-input" type="text" placeholder="Ej: ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors" 
+                    <input id="hf-url-input" type="text" placeholder="${t("placeholderInput")}" 
                            style="flex: 1; padding: 10px 14px; background: #0d0d15; border: 1px solid #33334d; border-radius: 8px; color: #fff; font-size: 14px; outline: none;" />
-                    <button id="hf-search-btn" style="padding: 10px 18px; background: #2a2a40; border: 1px solid #444466; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;">🔍 Buscar</button>
+                    <button id="hf-search-btn" style="padding: 10px 18px; background: #2a2a40; border: 1px solid #444466; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;">${t("btnSearch")}</button>
                 </div>
             </div>
 
             <div id="hf-search-result" style="display: none; padding: 10px 14px; background: #1a1a2e; border: 1px solid #ffbd2e44; border-radius: 8px; font-size: 13px; color: #ffbd2e;"></div>
 
             <button id="hf-download-btn" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #ffbd2e 0%, #e6a100 100%); border: none; border-radius: 10px; color: #000; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 15px rgba(255, 189, 46, 0.3);">
-                ⚡ Descargar a Máxima Velocidad (hf_transfer)
+                ${t("btnDownload")}
             </button>
 
             <div>
-                <label style="display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 6px;">💻 Terminal Log en Tiempo Real:</label>
+                <label style="display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 6px;">${t("terminalLog")}</label>
                 <div id="hf-log-box" style="height: 160px; background: #08080c; border: 1px solid #222233; border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #00ff66; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
-Ready. Ingresa un enlace o nombre de archivo para comenzar.
+${t("readyLog")}
                 </div>
             </div>
         </div>
@@ -296,27 +375,27 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
             <!-- ComfyUI Base Root Selector -->
             <div style="background: #1a1a2e; border: 1px solid #333355; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
                 <div style="font-size: 13px; font-weight: 700; color: #ffbd2e; display: flex; align-items: center; gap: 6px;">
-                    <span>🏠 Directorio Raíz de ComfyUI (Auto-detectar carpetas):</span>
+                    <span>${t("rootTitle")}</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
-                    <input id="hf-comfy-root-input" type="text" placeholder="Ej: J:\\Comfyui\\AG COMFY\\ComfyUI" style="flex: 1; padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
-                    <button id="hf-save-root-btn" style="padding: 8px 14px; background: #2a2a40; border: 1px solid #555588; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;">🔍 Auto-Detectar Subcarpetas</button>
+                    <input id="hf-comfy-root-input" type="text" placeholder="C:\\ComfyUI" style="flex: 1; padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
+                    <button id="hf-save-root-btn" style="padding: 8px 14px; background: #2a2a40; border: 1px solid #555588; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;">${t("btnAutoDetect")}</button>
                 </div>
             </div>
 
-            <div style="font-size: 14px; font-weight: 600; color: #ffbd2e;">Carpetas de Destino Disponibles:</div>
+            <div style="font-size: 14px; font-weight: 600; color: #ffbd2e;">${t("availableFolders")}</div>
             
             <div id="hf-folder-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #0d0d15; padding: 10px; border-radius: 8px; border: 1px solid #222233;"></div>
 
             <div style="border-top: 1px solid #2a2a3d; padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
-                <div style="font-size: 13px; font-weight: 600; color: #fff;" id="folder-form-title">➕ Añadir / Editar Carpeta Personalizada:</div>
+                <div style="font-size: 13px; font-weight: 600; color: #fff;" id="folder-form-title">${t("addEditFolder")}</div>
                 <input id="hf-new-folder-id" type="hidden" />
-                <input id="hf-new-folder-name" type="text" placeholder="Nombre descriptivo (ej: Text Encoders)" style="padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
-                <input id="hf-new-folder-path" type="text" placeholder="Ruta absoluta (ej: J:\\Comfyui\\...\\models\\text_encoders)" style="padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
+                <input id="hf-new-folder-name" type="text" placeholder="${t("placeholderName")}" style="padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
+                <input id="hf-new-folder-path" type="text" placeholder="${t("placeholderPath")}" style="padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
                 
                 <div style="display: flex; gap: 8px;">
-                    <button id="hf-save-folder-btn" style="flex: 1; padding: 10px; background: #00bb66; border: none; border-radius: 6px; color: #fff; font-weight: 700; cursor: pointer;">Guardar Carpeta</button>
-                    <button id="hf-cancel-folder-btn" style="display: none; padding: 10px; background: #444; border: none; border-radius: 6px; color: #fff; cursor: pointer;">Cancelar</button>
+                    <button id="hf-save-folder-btn" style="flex: 1; padding: 10px; background: #00bb66; border: none; border-radius: 6px; color: #fff; font-weight: 700; cursor: pointer;">${t("btnSave")}</button>
+                    <button id="hf-cancel-folder-btn" style="display: none; padding: 10px; background: #444; border: none; border-radius: 6px; color: #fff; cursor: pointer;">${t("btnCancel")}</button>
                 </div>
             </div>
         </div>
@@ -325,7 +404,6 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
 
-    // Tab switching
     const tabDownloadBtn = modal.querySelector("#tab-download-btn");
     const tabConfigBtn = modal.querySelector("#tab-config-btn");
     const tabDownloadContent = modal.querySelector("#tab-download-content");
@@ -350,17 +428,15 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         renderConfigFolderList();
     };
 
-    // Close button
     modal.querySelector("#hf-close-btn").onclick = () => { modalContainer.style.display = "none"; };
 
-    // ComfyUI Root Auto-Detect Handler
     const saveRootBtn = modal.querySelector("#hf-save-root-btn");
     const comfyRootInput = modal.querySelector("#hf-comfy-root-input");
 
     saveRootBtn.onclick = async () => {
         const rootPath = comfyRootInput.value.trim();
         if (!rootPath) {
-            alert("Ingresa un directorio de ComfyUI válido.");
+            alert(t("alertValidRoot"));
             return;
         }
 
@@ -372,18 +448,17 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
             });
             const res = await resp.json();
             if (res.success) {
-                alert(`✔ Directorio de ComfyUI actualizado y subcarpetas auto-detectadas con éxito!`);
+                alert(t("alertRootSuccess"));
                 renderConfigFolderList();
                 loadFolders();
             } else {
                 alert(`Error: ${res.error}`);
             }
         } catch (e) {
-            alert(`Error actualizando raíz de ComfyUI: ${e.message}`);
+            alert(`Error: ${e.message}`);
         }
     };
 
-    // Search logic
     const searchBtn = modal.querySelector("#hf-search-btn");
     const urlInput = modal.querySelector("#hf-url-input");
     const resultBox = modal.querySelector("#hf-search-result");
@@ -397,7 +472,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         if (!query) return;
         
         resultBox.style.display = "block";
-        resultBox.innerHTML = "⏳ Buscando en Hugging Face...";
+        resultBox.innerHTML = t("searching");
         resultBox.style.color = "#aaa";
 
         try {
@@ -411,7 +486,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
                 currentResolved = res;
                 resultBox.style.display = "block";
                 resultBox.style.color = "#ffbd2e";
-                resultBox.innerHTML = `✔ Encontrado: <b>${res.repo_id}</b> &rarr; <code>${res.filename}</code>`;
+                resultBox.innerHTML = `${t("found")} <b>${res.repo_id}</b> &rarr; <code>${res.filename}</code>`;
             } else {
                 currentResolved = null;
                 resultBox.style.display = "block";
@@ -421,7 +496,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         } catch (e) {
             resultBox.style.display = "block";
             resultBox.style.color = "#ff4444";
-            resultBox.innerHTML = `✖ Error de búsqueda: ${e.message}`;
+            resultBox.innerHTML = `✖ Error: ${e.message}`;
         }
     };
 
@@ -436,14 +511,14 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         }
 
         if (!currentResolved) {
-            alert("No se pudo resolver el repositorio de Hugging Face. Verifica el nombre.");
+            alert(t("alertNotFound"));
             return;
         }
 
         const folderSelect = modal.querySelector("#hf-folder-select");
         const targetPath = folderSelect.value;
 
-        logBox.innerHTML = `⚡ Iniciando descarga multihilo...\nRepo: ${currentResolved.repo_id}\nArchivo: ${currentResolved.filename}\nDestino: ${targetPath}\n\n`;
+        logBox.innerHTML = `⚡ [START] Downloading ${currentResolved.filename} from ${currentResolved.repo_id}...\n[TARGET] ${targetPath}\n\n`;
         downloadBtn.disabled = true;
         downloadBtn.style.opacity = "0.5";
 
@@ -466,13 +541,12 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
                 downloadBtn.style.opacity = "1";
             }
         } catch (e) {
-            alert(`Error al iniciar descarga: ${e.message}`);
+            alert(`Error: ${e.message}`);
             downloadBtn.disabled = false;
             downloadBtn.style.opacity = "1";
         }
     };
 
-    // Folder Config Handlers
     const saveFolderBtn = modal.querySelector("#hf-save-folder-btn");
     const cancelFolderBtn = modal.querySelector("#hf-cancel-folder-btn");
     const folderIdInput = modal.querySelector("#hf-new-folder-id");
@@ -485,7 +559,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         const id = folderIdInput.value.trim();
 
         if (!name || !path) {
-            alert("Completa el nombre y la ruta de la carpeta.");
+            alert(t("alertFillFields"));
             return;
         }
 
@@ -501,14 +575,14 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
                 folderNameInput.value = "";
                 folderPathInput.value = "";
                 cancelFolderBtn.style.display = "none";
-                modal.querySelector("#folder-form-title").textContent = "➕ Añadir / Editar Carpeta Personalizada:";
+                modal.querySelector("#folder-form-title").textContent = t("addEditFolder");
                 renderConfigFolderList();
                 loadFolders();
             } else {
                 alert(`Error: ${res.error}`);
             }
         } catch (e) {
-            alert(`Error guardando carpeta: ${e.message}`);
+            alert(`Error: ${e.message}`);
         }
     };
 
@@ -517,7 +591,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         folderNameInput.value = "";
         folderPathInput.value = "";
         cancelFolderBtn.style.display = "none";
-        modal.querySelector("#folder-form-title").textContent = "➕ Añadir / Editar Carpeta Personalizada:";
+        modal.querySelector("#folder-form-title").textContent = t("addEditFolder");
     };
 
     loadFolders();
@@ -547,7 +621,7 @@ async function renderConfigFolderList() {
     const comfyRootInput = document.querySelector("#hf-comfy-root-input");
     if (!listContainer) return;
 
-    listContainer.innerHTML = "Cargando...";
+    listContainer.innerHTML = "...";
 
     try {
         const resp = await fetch("/hf_superdownloader/folders");
@@ -567,8 +641,8 @@ async function renderConfigFolderList() {
                         <div style="font-size: 11px; color: #888; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${f.path}</div>
                     </div>
                     <div style="display: flex; gap: 6px;">
-                        <button class="edit-folder-btn" style="padding: 4px 8px; background: #2a2a40; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer;">✏️ Editar</button>
-                        <button class="delete-folder-btn" style="padding: 4px 8px; background: #aa2222; border: none; border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer;">🗑️ Borrar</button>
+                        <button class="edit-folder-btn" style="padding: 4px 8px; background: #2a2a40; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer;">${t("btnEdit")}</button>
+                        <button class="delete-folder-btn" style="padding: 4px 8px; background: #aa2222; border: none; border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer;">${t("btnDelete")}</button>
                     </div>
                 `;
 
@@ -577,11 +651,11 @@ async function renderConfigFolderList() {
                     document.querySelector("#hf-new-folder-name").value = f.name;
                     document.querySelector("#hf-new-folder-path").value = f.path;
                     document.querySelector("#hf-cancel-folder-btn").style.display = "inline-block";
-                    document.querySelector("#folder-form-title").textContent = `✏️ Editando: ${f.name}`;
+                    document.querySelector("#folder-form-title").textContent = `${t("btnEdit")}: ${f.name}`;
                 };
 
                 item.querySelector(".delete-folder-btn").onclick = async () => {
-                    if (confirm(`¿Eliminar la carpeta "${f.name}" de la lista?`)) {
+                    if (confirm(t("confirmDelete", { name: f.name }))) {
                         await fetch("/hf_superdownloader/folders/delete", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -596,7 +670,7 @@ async function renderConfigFolderList() {
             });
         }
     } catch (e) {
-        listContainer.innerHTML = "Error cargando carpetas.";
+        listContainer.innerHTML = "Error.";
     }
 }
 
