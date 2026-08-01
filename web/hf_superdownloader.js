@@ -3,13 +3,14 @@ import { app } from "../../scripts/app.js";
 app.registerExtension({
     name: "ComfyUI.HFSuperDownloader",
     async setup() {
-        console.log("[HF SuperDownloader] Initializing Vector HUD Web Extension...");
+        console.log("[HF SuperDownloader] Initializing Custom Combobox Web Extension...");
         createFloatingButton();
     }
 });
 
 let modalContainer = null;
 let pollInterval = null;
+let allLoadedFolders = [];
 
 // i18n Translations Dictionary (English Default)
 const i18n = {
@@ -23,7 +24,7 @@ const i18n = {
         targetFolder: "📁 CARPETA DE DESTINO EN COMFYUI (BUSCAR O SELECCIONAR):",
         urlOrFilename: "🔗 URL DE HUGGING FACE O NOMBRE DE ARCHIVO:",
         placeholderInput: "Ej: ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
-        placeholderFolder: "Escribe para buscar o selecciona una carpeta de destino...",
+        placeholderFolder: "Escribe para buscar o haz clic para ver carpetas...",
         btnSearch: "🔍 Buscar",
         btnDownload: "⚡ DESCARGAR A MÁXIMA VELOCIDAD (HF_TRANSFER)",
         terminalLog: "💻 TERMINAL LOG EN TIEMPO REAL:",
@@ -56,7 +57,7 @@ const i18n = {
         targetFolder: "📁 TARGET COMFYUI FOLDER (SEARCH OR SELECT):",
         urlOrFilename: "🔗 HUGGING FACE URL OR FILENAME:",
         placeholderInput: "E.g. ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
-        placeholderFolder: "Type to search or select a destination folder...",
+        placeholderFolder: "Type to search or click to view folders...",
         btnSearch: "🔍 Search",
         btnDownload: "⚡ DOWNLOAD AT MAX SPEED (HF_TRANSFER)",
         terminalLog: "💻 REAL-TIME TERMINAL LOG:",
@@ -86,7 +87,6 @@ function getLang() {
         const comfyLang = app?.ui?.settings?.getSettingValue?.("Comfy.Lang");
         if (comfyLang && comfyLang.toLowerCase().startsWith("es")) return "es";
     } catch(e) {}
-    // Default strictly to English unless ComfyUI explicitly selected Spanish
     return "en";
 }
 
@@ -354,6 +354,18 @@ async function openModal() {
             .pepe-input-field::placeholder {
                 color: #265431;
             }
+            .hf-combobox-option {
+                padding: 8px 12px;
+                color: #00cc44;
+                font-size: 12px;
+                font-family: 'Consolas', monospace;
+                cursor: pointer;
+                border-bottom: 1px solid #102615;
+            }
+            .hf-combobox-option:hover {
+                background: #0a1c0f;
+                color: #ffffff;
+            }
         </style>
 
         <!-- Vector Banner Header -->
@@ -384,12 +396,15 @@ async function openModal() {
 
         <!-- TAB 1: DOWNLOAD -->
         <div id="tab-download-content" class="pepe-card-box">
-            <!-- Searchable Target Destination Folder Bar -->
+            <!-- Searchable Target Destination Folder Custom Combobox -->
             <div>
                 <label style="display: block; font-size: 12px; font-weight: 800; color: #00cc44; margin-bottom: 6px; letter-spacing: 0.5px;">${t("targetFolder")}</label>
-                <div style="position: relative; display: flex; align-items: center;">
-                    <input id="hf-folder-input" list="hf-folder-datalist" type="text" placeholder="${t("placeholderFolder")}" class="pepe-input-field" />
-                    <datalist id="hf-folder-datalist"></datalist>
+                <div style="position: relative; width: 100%;">
+                    <input id="hf-folder-input" type="text" placeholder="${t("placeholderFolder")}" class="pepe-input-field" style="padding-right: 36px;" />
+                    <button id="hf-folder-toggle-btn" style="position: absolute; right: 4px; top: 4px; bottom: 4px; width: 30px; background: transparent; border: none; color: #00cc44; font-size: 11px; cursor: pointer;">▼</button>
+                    
+                    <!-- Floating Dropdown Menu -->
+                    <div id="hf-folder-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; width: 100%; max-height: 220px; overflow-y: auto; background: #040805; border: 1.5px solid #00b83b; border-radius: 4px; z-index: 10005; box-shadow: 0 8px 25px rgba(0,0,0,0.95);"></div>
                 </div>
             </div>
 
@@ -453,6 +468,63 @@ ${t("readyLog")}
 
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
+
+    // Setup Custom Combobox Behavior for Folder Input
+    const folderInput = modal.querySelector("#hf-folder-input");
+    const folderToggleBtn = modal.querySelector("#hf-folder-toggle-btn");
+    const dropdownMenu = modal.querySelector("#hf-folder-dropdown-menu");
+
+    function renderDropdownOptions(filterText = "") {
+        dropdownMenu.innerHTML = "";
+        const cleanFilter = filterText.toLowerCase();
+        
+        const filtered = allLoadedFolders.filter(f => {
+            const str = `${f.name} ${f.path}`.toLowerCase();
+            return !cleanFilter || str.includes(cleanFilter);
+        });
+
+        if (filtered.length === 0) {
+            dropdownMenu.innerHTML = `<div style="padding: 10px; color: #888; font-size: 11px;">No folder matches. Will use typed path.</div>`;
+        } else {
+            filtered.forEach(f => {
+                const opt = document.createElement("div");
+                opt.className = "hf-combobox-option";
+                opt.innerHTML = `<b>${f.name}</b> <span style="color:#447755; font-size:11px;">(${f.path})</span>`;
+                opt.onclick = () => {
+                    folderInput.value = `${f.name} (${f.path})`;
+                    dropdownMenu.style.display = "none";
+                };
+                dropdownMenu.appendChild(opt);
+            });
+        }
+    }
+
+    folderInput.onclick = () => {
+        renderDropdownOptions(folderInput.value);
+        dropdownMenu.style.display = "block";
+    };
+
+    folderToggleBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (dropdownMenu.style.display === "block") {
+            dropdownMenu.style.display = "none";
+        } else {
+            renderDropdownOptions("");
+            dropdownMenu.style.display = "block";
+        }
+    };
+
+    folderInput.oninput = () => {
+        renderDropdownOptions(folderInput.value);
+        dropdownMenu.style.display = "block";
+    };
+
+    // Close dropdown on outside click
+    modalContainer.addEventListener("click", (e) => {
+        if (!e.target.closest("#hf-folder-input") && !e.target.closest("#hf-folder-toggle-btn") && !e.target.closest("#hf-folder-dropdown-menu")) {
+            if (dropdownMenu) dropdownMenu.style.display = "none";
+        }
+    });
 
     const tabDownloadBtn = modal.querySelector("#tab-download-btn");
     const tabConfigBtn = modal.querySelector("#tab-config-btn");
@@ -665,16 +737,10 @@ async function loadFolders() {
     try {
         const resp = await fetch("/hf_superdownloader/folders");
         const res = await resp.json();
-        const datalist = document.querySelector("#hf-folder-datalist");
         const folderInput = document.querySelector("#hf-folder-input");
         
-        if (res.folders && datalist) {
-            datalist.innerHTML = "";
-            res.folders.forEach(f => {
-                const opt = document.createElement("option");
-                opt.value = `${f.name} (${f.path})`;
-                datalist.appendChild(opt);
-            });
+        if (res.folders) {
+            allLoadedFolders = res.folders;
 
             if (folderInput && !folderInput.value && res.folders.length > 0) {
                 const first = res.folders[0];
@@ -701,6 +767,7 @@ async function renderConfigFolderList() {
         }
 
         if (res.folders) {
+            allLoadedFolders = res.folders;
             listContainer.innerHTML = "";
             res.folders.forEach(f => {
                 const item = document.createElement("div");
