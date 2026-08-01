@@ -3,7 +3,7 @@ import { app } from "../../scripts/app.js";
 app.registerExtension({
     name: "ComfyUI.HFSuperDownloader",
     async setup() {
-        console.log("[HF SuperDownloader] Initializing Cyber-Pepe HUD Web Extension...");
+        console.log("[HF SuperDownloader] Initializing Cyber-Pepe Neon HUD Web Extension...");
         createFloatingButton();
     }
 });
@@ -11,30 +11,31 @@ app.registerExtension({
 let modalContainer = null;
 let pollInterval = null;
 
-// i18n Translations Dictionary
+// i18n Translations Dictionary (English Default)
 const i18n = {
     es: {
-        title: "HF SUPERDOWNLOADER // PEPE-GPT EDITION",
-        tooltip: "HF SuperDownloader (Mover: arrastrar centro | Escalar: esquinas)",
+        title: "Hugging Face SuperDownloader",
+        subtitle: "CYBERNETIC HIGH-SPEED HF DATA TRANSFER",
+        tooltip: "Hugging Face SuperDownloader (Mover: arrastrar centro | Escalar: esquinas)",
         tabDownload: "⚡ Descargar Modelo",
         tabConfig: "⚙️ Gestionar Directorios",
-        targetFolder: "📁 CARPETA DE DESTINO (COMFYUI):",
-        urlOrFilename: "🔗 URL DE HUGGING FACE O NOMBRE DE ARCHIVO:",
+        targetFolder: "📁 Carpeta de Destino en ComfyUI:",
+        urlOrFilename: "🔗 URL de Hugging Face o Nombre del Archivo:",
         placeholderInput: "Ej: ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
-        btnSearch: "🔍 BUSCAR",
-        btnDownload: "⚡ DESCARGAR A MÁXIMA VELOCIDAD (HF_TRANSFER)",
-        terminalLog: "💻 LOG TERMINAL EN TIEMPO REAL:",
+        btnSearch: "🔍 Buscar",
+        btnDownload: "⚡ Descargar a Máxima Velocidad (hf_transfer)",
+        terminalLog: "💻 Terminal Log en Tiempo Real:",
         searching: "⏳ Buscando en Hugging Face...",
         found: "✔ Encontrado:",
         readyLog: "Ready. Ingresa un enlace o nombre de archivo para comenzar.",
-        rootTitle: "🏠 DIRECTORIO RAÍZ DE COMFYUI (AUTO-DETECTAR):",
+        rootTitle: "🏠 Directorio Raíz de ComfyUI (Auto-detectar carpetas):",
         btnAutoDetect: "🔍 Auto-Detectar Subcarpetas",
-        availableFolders: "CARPETAS DE DESTINO DISPONIBLES:",
-        addEditFolder: "➕ AÑADIR / EDITAR CARPETA PERSONALIZADA:",
+        availableFolders: "Carpetas de Destino Disponibles:",
+        addEditFolder: "➕ Añadir / Editar Carpeta Personalizada:",
         placeholderName: "Nombre descriptivo (ej: Text Encoders)",
         placeholderPath: "Ruta absoluta (ej: C:\\ComfyUI\\models\\text_encoders)",
-        btnSave: "GUARDAR CARPETA",
-        btnCancel: "CANCELAR",
+        btnSave: "Guardar Carpeta",
+        btnCancel: "Cancelar",
         btnEdit: "✏️ Editar",
         btnDelete: "🗑️ Borrar",
         confirmDelete: '¿Eliminar la carpeta "{name}" de la lista?',
@@ -44,27 +45,28 @@ const i18n = {
         alertNotFound: "No se pudo resolver el repositorio de Hugging Face. Verifica el nombre."
     },
     en: {
-        title: "HF SUPERDOWNLOADER // PEPE-GPT EDITION",
-        tooltip: "HF SuperDownloader (Move: drag center | Scale: drag corners)",
+        title: "Hugging Face SuperDownloader",
+        subtitle: "CYBERNETIC HIGH-SPEED HF DATA TRANSFER",
+        tooltip: "Hugging Face SuperDownloader (Move: drag center | Scale: drag corners)",
         tabDownload: "⚡ Download Model",
         tabConfig: "⚙️ Manage Directories",
-        targetFolder: "📁 TARGET DESTINATION FOLDER:",
-        urlOrFilename: "🔗 HUGGING FACE URL OR FILENAME:",
+        targetFolder: "📁 Target ComfyUI Folder:",
+        urlOrFilename: "🔗 Hugging Face URL or Filename:",
         placeholderInput: "E.g. ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
-        btnSearch: "🔍 SEARCH",
-        btnDownload: "⚡ DOWNLOAD AT MAX SPEED (HF_TRANSFER)",
-        terminalLog: "💻 REAL-TIME TERMINAL LOG:",
+        btnSearch: "🔍 Search",
+        btnDownload: "⚡ Download at Max Speed (hf_transfer)",
+        terminalLog: "💻 Real-Time Terminal Log:",
         searching: "⏳ Searching Hugging Face...",
         found: "✔ Found:",
         readyLog: "Ready. Enter a link or filename to start.",
-        rootTitle: "🏠 COMFYUI BASE ROOT DIRECTORY (AUTO-DETECT):",
+        rootTitle: "🏠 ComfyUI Base Root Directory (Auto-detect folders):",
         btnAutoDetect: "🔍 Auto-Detect Subfolders",
-        availableFolders: "AVAILABLE DESTINATION FOLDERS:",
-        addEditFolder: "➕ ADD / EDIT CUSTOM FOLDER:",
+        availableFolders: "Available Destination Folders:",
+        addEditFolder: "➕ Add / Edit Custom Folder:",
         placeholderName: "Descriptive name (e.g. Text Encoders)",
         placeholderPath: "Absolute path (e.g. C:\\ComfyUI\\models\\text_encoders)",
-        btnSave: "SAVE FOLDER",
-        btnCancel: "CANCEL",
+        btnSave: "Save Folder",
+        btnCancel: "Cancel",
         btnEdit: "✏️ Edit",
         btnDelete: "🗑️ Delete",
         confirmDelete: 'Delete folder "{name}" from the list?',
@@ -80,7 +82,7 @@ function getLang() {
         const comfyLang = app?.ui?.settings?.getSettingValue?.("Comfy.Lang");
         if (comfyLang && comfyLang.toLowerCase().startsWith("es")) return "es";
     } catch(e) {}
-    // Default strictly to English unless ComfyUI settings explicitly set Spanish
+    // Default strictly to English unless ComfyUI explicitly selected Spanish
     return "en";
 }
 
@@ -128,9 +130,9 @@ function createFloatingButton() {
         width: ${savedSize}px;
         height: ${savedSize}px;
         border-radius: 50%;
-        background: #06090e;
+        background: #080c14;
         border: 2px solid #00ff66;
-        box-shadow: 0 0 15px rgba(0, 255, 102, 0.4), 0 4px 18px rgba(0, 0, 0, 0.9);
+        box-shadow: 0 0 16px rgba(0, 255, 102, 0.5), 0 4px 20px rgba(0, 0, 0, 0.95);
         z-index: 9999;
         display: flex;
         align-items: center;
@@ -184,12 +186,12 @@ function createFloatingButton() {
     btn.onmouseenter = () => {
         btn.querySelectorAll(".hf-resize-handle").forEach(h => h.style.opacity = "1");
         btn.style.transform = "scale(1.08)";
-        btn.style.boxShadow = "0 0 25px rgba(0, 255, 102, 0.7), 0 6px 24px rgba(0, 0, 0, 0.9)";
+        btn.style.boxShadow = "0 0 25px rgba(0, 255, 102, 0.7), 0 6px 24px rgba(0, 0, 0, 0.95)";
     };
     btn.onmouseleave = () => {
         btn.querySelectorAll(".hf-resize-handle").forEach(h => h.style.opacity = "0");
         btn.style.transform = "scale(1)";
-        btn.style.boxShadow = "0 0 15px rgba(0, 255, 102, 0.4), 0 4px 18px rgba(0, 0, 0, 0.9)";
+        btn.style.boxShadow = "0 0 16px rgba(0, 255, 102, 0.5), 0 4px 20px rgba(0, 0, 0, 0.95)";
     };
 
     let isDraggingMove = false;
@@ -300,8 +302,8 @@ async function openModal() {
         left: 0;
         width: 100vw;
         height: 100vh;
-        background: rgba(4, 8, 12, 0.88);
-        backdrop-filter: blur(10px);
+        background: rgba(4, 8, 14, 0.88);
+        backdrop-filter: blur(12px);
         z-index: 10000;
         display: flex;
         align-items: center;
@@ -315,10 +317,10 @@ async function openModal() {
         max-width: 94vw;
         background: #080c14;
         border: 2px solid #00ff66;
-        border-radius: 12px;
-        box-shadow: 0 0 35px rgba(0, 255, 102, 0.25), 0 20px 60px rgba(0, 0, 0, 0.95);
+        border-radius: 14px;
+        box-shadow: 0 0 35px rgba(0, 255, 102, 0.3), 0 20px 60px rgba(0, 0, 0, 0.95);
         padding: 24px;
-        color: #00ff66;
+        color: #e0e0e0;
         display: flex;
         flex-direction: column;
         gap: 16px;
@@ -329,12 +331,12 @@ async function openModal() {
         <!-- Cyber-Pepe Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ff6633; padding-bottom: 14px;">
             <div style="display: flex; align-items: center; gap: 14px;">
-                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid #00ff66; overflow: hidden; box-shadow: 0 0 12px rgba(0,255,102,0.5);">
+                <div style="width: 46px; height: 46px; border-radius: 50%; border: 2px solid #00ff66; overflow: hidden; box-shadow: 0 0 12px rgba(0,255,102,0.6);">
                     <img src="/extensions/ComfyUI-HF-SuperDownloader/hf_icon.png?v=${Date.now()}" style="width: 100%; height: 100%; object-fit: cover;" />
                 </div>
                 <div>
-                    <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #00ff66; letter-spacing: 1px; text-shadow: 0 0 8px rgba(0,255,102,0.6);">${t("title")}</h2>
-                    <div style="font-size: 11px; color: #00cc55; opacity: 0.8; letter-spacing: 0.5px;">CYBERNETIC HIGH-SPEED HF DATA TRANSFER</div>
+                    <h2 style="margin: 0; font-size: 19px; font-weight: 800; color: #ffffff; letter-spacing: 0.5px; text-shadow: 0 0 10px rgba(0,255,102,0.4);">${t("title")}</h2>
+                    <div style="font-size: 10px; color: #00ff66; opacity: 0.85; letter-spacing: 1px;">CYBERNETIC HIGH-SPEED HF DATA TRANSFER</div>
                 </div>
             </div>
             <button id="hf-close-btn" style="background: none; border: 1px solid #00ff6666; border-radius: 6px; color: #00ff66; font-size: 18px; width: 32px; height: 32px; cursor: pointer; transition: all 0.2s;">✕</button>
@@ -342,8 +344,8 @@ async function openModal() {
 
         <!-- Cyber Navigation Tabs -->
         <div style="display: flex; gap: 10px; border-bottom: 1px solid #00ff6633; padding-bottom: 10px;">
-            <button id="tab-download-btn" style="padding: 8px 16px; background: #00ff6622; border: 1px solid #00ff66; border-radius: 6px; color: #00ff66; font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px;">${t("tabDownload")}</button>
-            <button id="tab-config-btn" style="padding: 8px 16px; background: #0c141f; border: 1px solid #00ff6644; border-radius: 6px; color: #00bb44; font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px;">${t("tabConfig")}</button>
+            <button id="tab-download-btn" style="padding: 8px 18px; background: #00ff6622; border: 1px solid #00ff66; border-radius: 6px; color: #00ff66; font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px; box-shadow: 0 0 12px rgba(0,255,102,0.25);">${t("tabDownload")}</button>
+            <button id="tab-config-btn" style="padding: 8px 18px; background: #0c141f; border: 1px solid #00ff6644; border-radius: 6px; color: #00bb44; font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px;">${t("tabConfig")}</button>
         </div>
 
         <!-- TAB 1: DOWNLOAD -->
@@ -364,7 +366,8 @@ async function openModal() {
 
             <div id="hf-search-result" style="display: none; padding: 10px 14px; background: #00ff6611; border: 1px solid #00ff66; border-radius: 6px; font-size: 12px; color: #00ff66; font-family: 'Consolas', monospace;"></div>
 
-            <button id="hf-download-btn" style="width: 100%; padding: 13px; background: #00ff66; border: none; border-radius: 6px; color: #04070d; font-size: 15px; font-weight: 800; cursor: pointer; letter-spacing: 1px; box-shadow: 0 0 20px rgba(0, 255, 102, 0.5); text-transform: uppercase;">
+            <!-- Main Cyber-Green Action Button -->
+            <button id="hf-download-btn" style="width: 100%; padding: 13px; background: #00ff66; border: none; border-radius: 6px; color: #04070d; font-size: 15px; font-weight: 800; cursor: pointer; letter-spacing: 1px; box-shadow: 0 0 22px rgba(0, 255, 102, 0.6); text-transform: uppercase;">
                 ${t("btnDownload")}
             </button>
 
@@ -420,9 +423,11 @@ ${t("readyLog")}
         tabDownloadBtn.style.background = "#00ff6622";
         tabDownloadBtn.style.color = "#00ff66";
         tabDownloadBtn.style.borderColor = "#00ff66";
+        tabDownloadBtn.style.boxShadow = "0 0 12px rgba(0,255,102,0.25)";
         tabConfigBtn.style.background = "#0c141f";
         tabConfigBtn.style.color = "#00bb44";
         tabConfigBtn.style.borderColor = "#00ff6644";
+        tabConfigBtn.style.boxShadow = "none";
         tabDownloadContent.style.display = "flex";
         tabConfigContent.style.display = "none";
     };
@@ -431,9 +436,11 @@ ${t("readyLog")}
         tabConfigBtn.style.background = "#00ff6622";
         tabConfigBtn.style.color = "#00ff66";
         tabConfigBtn.style.borderColor = "#00ff66";
+        tabConfigBtn.style.boxShadow = "0 0 12px rgba(0,255,102,0.25)";
         tabDownloadBtn.style.background = "#0c141f";
         tabDownloadBtn.style.color = "#00bb44";
         tabDownloadBtn.style.borderColor = "#00ff6644";
+        tabDownloadBtn.style.boxShadow = "none";
         tabConfigContent.style.display = "flex";
         tabDownloadContent.style.display = "none";
         renderConfigFolderList();
