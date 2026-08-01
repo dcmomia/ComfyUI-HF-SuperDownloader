@@ -377,7 +377,7 @@ async function openModal() {
                 </div>
                 <div>
                     <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: 1px; font-family: 'Consolas', monospace;">
-                        ${t("titlePrefix")} <span style="color:#2ecc71;">${t("titleHighlight")}</span> <span style="color:#2ecc71; animation: hfBlink 1s infinite;">|</span>
+                        ${t("titlePrefix")} <span style="color:#2ecc71;">${t("titleHighlight")}</span>
                     </h2>
                     <div style="font-size: 10px; color: #2ecc71; opacity: 0.85; letter-spacing: 1px; font-family: 'Consolas', monospace;">${t("subtitle")}</div>
                 </div>
