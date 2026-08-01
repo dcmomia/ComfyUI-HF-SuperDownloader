@@ -3,7 +3,7 @@ import { app } from "../../scripts/app.js";
 app.registerExtension({
     name: "ComfyUI.HFSuperDownloader",
     async setup() {
-        console.log("[HF SuperDownloader] Initializing Proposal 1 PepeGPT HUD Web Extension...");
+        console.log("[HF SuperDownloader] Initializing Vector HUD Web Extension...");
         createFloatingButton();
     }
 });
@@ -14,26 +14,26 @@ let pollInterval = null;
 // i18n Translations Dictionary (English Default)
 const i18n = {
     es: {
-        titlePrefix: "HOW CAN",
-        titleHighlight: "I HELP?",
-        subtitle: "PEPEGPT DOWNLOAD ENGINE // ULTRA-FAST DATA TRANSFER",
+        titlePrefix: "HUGGING FACE",
+        titleHighlight: "SUPERDOWNLOADER",
+        subtitle: "HIGH-SPEED HF DATA TRANSFER ENGINE",
         tooltip: "HF SuperDownloader (Mover: arrastrar centro | Escalar: esquinas)",
         tabDownload: "⚡ Descargar Modelo",
         tabConfig: "⚙️ Gestionar Directorios",
-        targetFolder: "💡 CARPETA DE DESTINO EN COMFYUI (BUSCAR O SELECCIONAR):",
-        urlOrFilename: "💡 URL DE HUGGING FACE O NOMBRE DE ARCHIVO:",
-        placeholderInput: "Ask PepeGPT... (ej: ltx_2.3_22b_distilled_1.1_lora.safetensors)",
+        targetFolder: "📁 CARPETA DE DESTINO EN COMFYUI (BUSCAR O SELECCIONAR):",
+        urlOrFilename: "🔗 URL DE HUGGING FACE O NOMBRE DE ARCHIVO:",
+        placeholderInput: "Ej: ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
         placeholderFolder: "Escribe para buscar o selecciona una carpeta de destino...",
-        btnSearch: "Ask",
+        btnSearch: "🔍 Buscar",
         btnDownload: "⚡ DESCARGAR A MÁXIMA VELOCIDAD (HF_TRANSFER)",
-        terminalLog: "💡 TERMINAL LOG EN TIEMPO REAL:",
+        terminalLog: "💻 TERMINAL LOG EN TIEMPO REAL:",
         searching: "⏳ Buscando en Hugging Face...",
         found: "✔ Encontrado:",
         readyLog: "Ready. Ingresa un enlace o nombre de archivo para comenzar.",
-        rootTitle: "💡 DIRECTORIO RAÍZ DE COMFYUI (AUTO-DETECTAR):",
+        rootTitle: "🏠 DIRECTORIO RAÍZ DE COMFYUI (AUTO-DETECTAR):",
         btnAutoDetect: "Auto-Detectar Subcarpetas",
-        availableFolders: "💡 CARPETAS DE DESTINO DISPONIBLES:",
-        addEditFolder: "💡 AÑADIR / EDITAR CARPETA PERSONALIZADA:",
+        availableFolders: "CARPETAS DE DESTINO DISPONIBLES:",
+        addEditFolder: "➕ AÑADIR / EDITAR CARPETA PERSONALIZADA:",
         placeholderName: "Nombre descriptivo (ej: Text Encoders)",
         placeholderPath: "Ruta absoluta (ej: C:\\ComfyUI\\models\\text_encoders)",
         btnSave: "GUARDAR CARPETA",
@@ -47,26 +47,26 @@ const i18n = {
         alertNotFound: "No se pudo resolver el repositorio de Hugging Face. Verifica el nombre."
     },
     en: {
-        titlePrefix: "HOW CAN",
-        titleHighlight: "I HELP?",
-        subtitle: "PEPEGPT DOWNLOAD ENGINE // ULTRA-FAST DATA TRANSFER",
+        titlePrefix: "HUGGING FACE",
+        titleHighlight: "SUPERDOWNLOADER",
+        subtitle: "HIGH-SPEED HF DATA TRANSFER ENGINE",
         tooltip: "HF SuperDownloader (Move: drag center | Scale: drag corners)",
         tabDownload: "⚡ Download Model",
         tabConfig: "⚙️ Manage Directories",
-        targetFolder: "💡 TARGET COMFYUI FOLDER (SEARCH OR SELECT):",
-        urlOrFilename: "💡 HUGGING FACE URL OR FILENAME:",
-        placeholderInput: "Ask PepeGPT... (e.g. ltx_2.3_22b_distilled_1.1_lora.safetensors)",
+        targetFolder: "📁 TARGET COMFYUI FOLDER (SEARCH OR SELECT):",
+        urlOrFilename: "🔗 HUGGING FACE URL OR FILENAME:",
+        placeholderInput: "E.g. ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
         placeholderFolder: "Type to search or select a destination folder...",
-        btnSearch: "Ask",
+        btnSearch: "🔍 Search",
         btnDownload: "⚡ DOWNLOAD AT MAX SPEED (HF_TRANSFER)",
-        terminalLog: "💡 REAL-TIME TERMINAL LOG:",
+        terminalLog: "💻 REAL-TIME TERMINAL LOG:",
         searching: "⏳ Searching Hugging Face...",
         found: "✔ Found:",
         readyLog: "Ready. Enter a link or filename to start.",
-        rootTitle: "💡 COMFYUI BASE ROOT DIRECTORY (AUTO-DETECT):",
+        rootTitle: "🏠 COMFYUI BASE ROOT DIRECTORY (AUTO-DETECT):",
         btnAutoDetect: "Auto-Detect Subfolders",
-        availableFolders: "💡 AVAILABLE DESTINATION FOLDERS:",
-        addEditFolder: "💡 ADD / EDIT CUSTOM FOLDER:",
+        availableFolders: "AVAILABLE DESTINATION FOLDERS:",
+        addEditFolder: "➕ ADD / EDIT CUSTOM FOLDER:",
         placeholderName: "Descriptive name (e.g. Text Encoders)",
         placeholderPath: "Absolute path (e.g. C:\\ComfyUI\\models\\text_encoders)",
         btnSave: "SAVE FOLDER",
@@ -135,7 +135,7 @@ function createFloatingButton() {
         height: ${savedSize}px;
         border-radius: 50%;
         background: #040905;
-        border: 2.5px solid #00ff33;
+        border: 2px solid #00b83b;
         z-index: 9999;
         display: flex;
         align-items: center;
@@ -175,7 +175,7 @@ function createFloatingButton() {
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #00ff33;
+            background: #00b83b;
             border: 1px solid #000;
             cursor: ${cursorType};
             z-index: 10001;
@@ -315,9 +315,9 @@ async function openModal() {
         width: 780px;
         max-width: 95vw;
         background: #040905;
-        border: 3px solid #00ff33;
-        outline: 2px solid #004d1a;
-        outline-offset: 4px;
+        border: 2px solid #00b83b;
+        outline: 1.5px solid #004d1a;
+        outline-offset: 3px;
         clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
         padding: 24px;
         color: #e0e0e0;
@@ -332,7 +332,7 @@ async function openModal() {
             @keyframes hfBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
             .pepe-card-box {
                 background: #08120a;
-                border: 1.5px solid #00e633;
+                border: 1.5px solid #00b83b;
                 border-radius: 6px;
                 padding: 16px;
                 display: flex;
@@ -343,41 +343,41 @@ async function openModal() {
                 width: 100%;
                 padding: 11px 14px;
                 background: #040805;
-                border: 1.5px solid #00ff33;
+                border: 1.5px solid #00b83b;
                 border-radius: 4px;
-                color: #00ff33;
+                color: #00cc44;
                 font-size: 13px;
                 font-family: 'Consolas', monospace;
                 outline: none;
                 box-sizing: border-box;
             }
             .pepe-input-field::placeholder {
-                color: #2b5534;
+                color: #265431;
             }
         </style>
 
-        <!-- Pepe-GPT Vector Banner Header -->
-        <div style="background: #0c190f; border: 1.5px solid #00ff33; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+        <!-- Vector Banner Header -->
+        <div style="background: #0a170d; border: 1.5px solid #00b83b; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 14px;">
-                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid #00ff33; overflow: hidden;">
+                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid #00b83b; overflow: hidden;">
                     <img src="/extensions/ComfyUI-HF-SuperDownloader/hf_icon.png?v=${Date.now()}" style="width: 100%; height: 100%; object-fit: cover;" />
                 </div>
                 <div>
-                    <h2 style="margin: 0; font-size: 22px; font-weight: 900; color: #ffffff; letter-spacing: 1.5px; font-family: 'Consolas', monospace;">
-                        ${t("titlePrefix")} <span style="color:#00ff33;">${t("titleHighlight")}</span> <span style="color:#00ff33; animation: hfBlink 1s infinite;">|</span>
+                    <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: 1px; font-family: 'Consolas', monospace;">
+                        ${t("titlePrefix")} <span style="color:#00cc44;">${t("titleHighlight")}</span> <span style="color:#00cc44; animation: hfBlink 1s infinite;">|</span>
                     </h2>
-                    <div style="font-size: 10px; color: #00ff33; opacity: 0.85; letter-spacing: 1px; font-family: 'Consolas', monospace;">${t("subtitle")}</div>
+                    <div style="font-size: 10px; color: #00cc44; opacity: 0.85; letter-spacing: 1px; font-family: 'Consolas', monospace;">${t("subtitle")}</div>
                 </div>
             </div>
-            <button id="hf-close-btn" style="background: #040805; border: 1.5px solid #00ff33; color: #00ff33; font-size: 16px; width: 32px; height: 32px; cursor: pointer; font-weight: bold; font-family: 'Consolas', monospace;">✕</button>
+            <button id="hf-close-btn" style="background: #040805; border: 1.5px solid #00b83b; color: #00cc44; font-size: 16px; width: 32px; height: 32px; cursor: pointer; font-weight: bold; font-family: 'Consolas', monospace;">✕</button>
         </div>
 
-        <!-- Pepe-GPT Style Pills / Tabs -->
+        <!-- Style Pills / Tabs -->
         <div style="display: flex; gap: 12px; border-bottom: 1.5px solid #142a17; padding-bottom: 12px;">
-            <button id="tab-download-btn" style="padding: 8px 20px; background: #0a170d; border: 1.5px solid #00ff33; border-radius: 6px; color: #00ff33; font-size: 13px; font-weight: 800; cursor: pointer; font-family: 'Consolas', monospace; display: flex; align-items: center; gap: 6px;">
+            <button id="tab-download-btn" style="padding: 8px 20px; background: #0a170d; border: 1.5px solid #00b83b; border-radius: 6px; color: #00cc44; font-size: 13px; font-weight: 800; cursor: pointer; font-family: 'Consolas', monospace; display: flex; align-items: center; gap: 6px;">
                 ${t("tabDownload")}
             </button>
-            <button id="tab-config-btn" style="padding: 8px 20px; background: #050b06; border: 1px solid #142817; border-radius: 6px; color: #558866; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Consolas', monospace; display: flex; align-items: center; gap: 6px;">
+            <button id="tab-config-btn" style="padding: 8px 20px; background: #050b06; border: 1px solid #142817; border-radius: 6px; color: #447755; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Consolas', monospace; display: flex; align-items: center; gap: 6px;">
                 ${t("tabConfig")}
             </button>
         </div>
@@ -386,7 +386,7 @@ async function openModal() {
         <div id="tab-download-content" class="pepe-card-box">
             <!-- Searchable Target Destination Folder Bar -->
             <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: #00ff33; margin-bottom: 6px; letter-spacing: 0.5px;">${t("targetFolder")}</label>
+                <label style="display: block; font-size: 12px; font-weight: 800; color: #00cc44; margin-bottom: 6px; letter-spacing: 0.5px;">${t("targetFolder")}</label>
                 <div style="position: relative; display: flex; align-items: center;">
                     <input id="hf-folder-input" list="hf-folder-datalist" type="text" placeholder="${t("placeholderFolder")}" class="pepe-input-field" />
                     <datalist id="hf-folder-datalist"></datalist>
@@ -394,26 +394,26 @@ async function openModal() {
             </div>
 
             <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: #00ff33; margin-bottom: 6px; letter-spacing: 0.5px;">${t("urlOrFilename")}</label>
-                <div style="display: flex; gap: 0; background: #040805; border: 1.5px solid #00ff33; border-radius: 4px; padding: 3px; align-items: center;">
+                <label style="display: block; font-size: 12px; font-weight: 800; color: #00cc44; margin-bottom: 6px; letter-spacing: 0.5px;">${t("urlOrFilename")}</label>
+                <div style="display: flex; gap: 0; background: #040805; border: 1.5px solid #00b83b; border-radius: 4px; padding: 3px; align-items: center;">
                     <input id="hf-url-input" type="text" placeholder="${t("placeholderInput")}" 
-                           style="flex: 1; padding: 10px 14px; background: transparent; border: none; color: #00ff33; font-size: 13px; font-family: 'Consolas', monospace; outline: none;" />
-                    <button id="hf-search-btn" style="padding: 10px 24px; background: linear-gradient(135deg, #00ff33 0%, #00cc28 100%); border: none; clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); color: #000000; font-size: 13px; font-weight: 900; cursor: pointer; font-family: 'Consolas', monospace;">
+                           style="flex: 1; padding: 10px 14px; background: transparent; border: none; color: #00cc44; font-size: 13px; font-family: 'Consolas', monospace; outline: none;" />
+                    <button id="hf-search-btn" style="padding: 10px 22px; background: linear-gradient(135deg, #00b83b 0%, #00a832 100%); border: none; clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); color: #000000; font-size: 13px; font-weight: 900; cursor: pointer; font-family: 'Consolas', monospace;">
                         ${t("btnSearch")}
                     </button>
                 </div>
             </div>
 
-            <div id="hf-search-result" style="display: none; padding: 10px 14px; background: #0a170d; border: 1.5px solid #00ff33; border-radius: 4px; font-size: 12px; color: #00ff33; font-family: 'Consolas', monospace;"></div>
+            <div id="hf-search-result" style="display: none; padding: 10px 14px; background: #0a170d; border: 1.5px solid #00b83b; border-radius: 4px; font-size: 12px; color: #00cc44; font-family: 'Consolas', monospace;"></div>
 
-            <!-- Main Pepe-GPT Angled Green Action Button -->
-            <button id="hf-download-btn" style="width: 100%; padding: 14px; background: #00ff33; border: none; clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); color: #000000; font-size: 16px; font-weight: 900; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; font-family: 'Consolas', monospace;">
+            <!-- Main Angled Green Action Button -->
+            <button id="hf-download-btn" style="width: 100%; padding: 14px; background: #00b83b; border: none; clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); color: #000000; font-size: 15px; font-weight: 900; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; font-family: 'Consolas', monospace;">
                 ${t("btnDownload")}
             </button>
 
             <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: #00ff33; margin-bottom: 6px; letter-spacing: 0.5px;">${t("terminalLog")}</label>
-                <div id="hf-log-box" style="height: 160px; background: #030604; border: 1.5px solid #142a17; border-radius: 4px; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #00ff33; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
+                <label style="display: block; font-size: 12px; font-weight: 800; color: #00cc44; margin-bottom: 6px; letter-spacing: 0.5px;">${t("terminalLog")}</label>
+                <div id="hf-log-box" style="height: 160px; background: #030604; border: 1.5px solid #142a17; border-radius: 4px; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #00cc44; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
 ${t("readyLog")}
                 </div>
             </div>
@@ -424,27 +424,27 @@ ${t("readyLog")}
             
             <!-- ComfyUI Base Root Selector -->
             <div style="background: #040805; border: 1.5px solid #142a17; border-radius: 4px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-                <div style="font-size: 12px; font-weight: 800; color: #00ff33; display: flex; align-items: center; gap: 6px;">
+                <div style="font-size: 12px; font-weight: 800; color: #00cc44; display: flex; align-items: center; gap: 6px;">
                     <span>${t("rootTitle")}</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <input id="hf-comfy-root-input" type="text" placeholder="C:\\ComfyUI" class="pepe-input-field" style="flex: 1;" />
-                    <button id="hf-save-root-btn" style="padding: 8px 16px; background: #0a170d; border: 1.5px solid #00ff33; border-radius: 4px; color: #00ff33; font-size: 12px; font-weight: 800; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnAutoDetect")}</button>
+                    <button id="hf-save-root-btn" style="padding: 8px 16px; background: #0a170d; border: 1.5px solid #00b83b; border-radius: 4px; color: #00cc44; font-size: 12px; font-weight: 800; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnAutoDetect")}</button>
                 </div>
             </div>
 
-            <div style="font-size: 13px; font-weight: 800; color: #00ff33; letter-spacing: 0.5px;">${t("availableFolders")}</div>
+            <div style="font-size: 13px; font-weight: 800; color: #00cc44; letter-spacing: 0.5px;">${t("availableFolders")}</div>
             
             <div id="hf-folder-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #030604; padding: 10px; border-radius: 4px; border: 1.5px solid #142a17;"></div>
 
             <div style="border-top: 1.5px solid #142a17; padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
-                <div style="font-size: 12px; font-weight: 800; color: #00ff33;" id="folder-form-title">${t("addEditFolder")}</div>
+                <div style="font-size: 12px; font-weight: 800; color: #00cc44;" id="folder-form-title">${t("addEditFolder")}</div>
                 <input id="hf-new-folder-id" type="hidden" />
                 <input id="hf-new-folder-name" type="text" placeholder="${t("placeholderName")}" class="pepe-input-field" />
                 <input id="hf-new-folder-path" type="text" placeholder="${t("placeholderPath")}" class="pepe-input-field" />
                 
                 <div style="display: flex; gap: 8px;">
-                    <button id="hf-save-folder-btn" style="flex: 1; padding: 10px; background: #00ff33; border: none; border-radius: 4px; color: #000000; font-weight: 900; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnSave")}</button>
+                    <button id="hf-save-folder-btn" style="flex: 1; padding: 10px; background: #00b83b; border: none; border-radius: 4px; color: #000000; font-weight: 900; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnSave")}</button>
                     <button id="hf-cancel-folder-btn" style="display: none; padding: 10px; background: #1a1a1a; border: 1px solid #444; border-radius: 4px; color: #888; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnCancel")}</button>
                 </div>
             </div>
@@ -461,10 +461,10 @@ ${t("readyLog")}
 
     tabDownloadBtn.onclick = () => {
         tabDownloadBtn.style.background = "#0a170d";
-        tabDownloadBtn.style.color = "#00ff33";
-        tabDownloadBtn.style.borderColor = "#00ff33";
+        tabDownloadBtn.style.color = "#00cc44";
+        tabDownloadBtn.style.borderColor = "#00b83b";
         tabConfigBtn.style.background = "#050b06";
-        tabConfigBtn.style.color = "#558866";
+        tabConfigBtn.style.color = "#447755";
         tabConfigBtn.style.borderColor = "#142817";
         tabDownloadContent.style.display = "flex";
         tabConfigContent.style.display = "none";
@@ -472,10 +472,10 @@ ${t("readyLog")}
 
     tabConfigBtn.onclick = () => {
         tabConfigBtn.style.background = "#0a170d";
-        tabConfigBtn.style.color = "#00ff33";
-        tabConfigBtn.style.borderColor = "#00ff33";
+        tabConfigBtn.style.color = "#00cc44";
+        tabConfigBtn.style.borderColor = "#00b83b";
         tabDownloadBtn.style.background = "#050b06";
-        tabDownloadBtn.style.color = "#558866";
+        tabDownloadBtn.style.color = "#447755";
         tabDownloadBtn.style.borderColor = "#142817";
         tabConfigContent.style.display = "flex";
         tabDownloadContent.style.display = "none";
@@ -527,7 +527,7 @@ ${t("readyLog")}
         
         resultBox.style.display = "block";
         resultBox.innerHTML = t("searching");
-        resultBox.style.color = "#00ff33";
+        resultBox.style.color = "#00cc44";
 
         try {
             const resp = await fetch("/hf_superdownloader/search", {
@@ -539,7 +539,7 @@ ${t("readyLog")}
             if (res.success) {
                 currentResolved = res;
                 resultBox.style.display = "block";
-                resultBox.style.color = "#00ff33";
+                resultBox.style.color = "#00cc44";
                 resultBox.innerHTML = `${t("found")} <b>${res.repo_id}</b> &rarr; <code>${res.filename}</code>`;
             } else {
                 currentResolved = null;
@@ -572,7 +572,6 @@ ${t("readyLog")}
         const folderInput = modal.querySelector("#hf-folder-input");
         let targetPath = folderInput.value.trim();
         
-        // Extract absolute path if format is "Name (Path)"
         const matchPath = targetPath.match(/\(([^)]+)\)$/);
         if (matchPath) {
             targetPath = matchPath[1];
@@ -677,7 +676,6 @@ async function loadFolders() {
                 datalist.appendChild(opt);
             });
 
-            // Set default value to first folder if empty
             if (folderInput && !folderInput.value && res.folders.length > 0) {
                 const first = res.folders[0];
                 folderInput.value = `${first.name} (${first.path})`;
@@ -709,11 +707,11 @@ async function renderConfigFolderList() {
                 item.style.cssText = "display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #040805; border-radius: 4px; border: 1px solid #142a17;";
                 item.innerHTML = `
                     <div style="flex: 1; overflow: hidden;">
-                        <span style="font-weight: 700; color: #00ff33; font-size: 12px; font-family: 'Consolas', monospace;">${f.name}</span>
+                        <span style="font-weight: 700; color: #00cc44; font-size: 12px; font-family: 'Consolas', monospace;">${f.name}</span>
                         <div style="font-size: 10px; color: #447755; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-family: 'Consolas', monospace;">${f.path}</div>
                     </div>
                     <div style="display: flex; gap: 6px;">
-                        <button class="edit-folder-btn" style="padding: 4px 10px; background: #0a170d; border: 1px solid #00ff33; border-radius: 3px; color: #00ff33; font-size: 11px; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnEdit")}</button>
+                        <button class="edit-folder-btn" style="padding: 4px 10px; background: #0a170d; border: 1px solid #00b83b; border-radius: 3px; color: #00cc44; font-size: 11px; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnEdit")}</button>
                         <button class="delete-folder-btn" style="padding: 4px 10px; background: #991111; border: none; border-radius: 3px; color: #ffffff; font-size: 11px; cursor: pointer; font-family: 'Consolas', monospace;">${t("btnDelete")}</button>
                     </div>
                 `;
