@@ -164,14 +164,13 @@ function createFloatingButton() {
             btn.style.bottom = "auto";
             btn.style.right = "auto";
         } else if (isDraggingResize) {
-            // Proportional 1:1 resize
             let delta = dx;
             if (activeHandle.className.includes("nw") || activeHandle.className.includes("sw")) {
                 delta = -dx;
             }
             
             let newSize = initialSize + delta;
-            newSize = Math.max(32, Math.min(160, newSize)); // Clamped between 32px and 160px
+            newSize = Math.max(32, Math.min(160, newSize));
 
             btn.style.width = newSize + "px";
             btn.style.height = newSize + "px";
@@ -232,8 +231,8 @@ async function openModal() {
 
     const modal = document.createElement("div");
     modal.style.cssText = `
-        width: 720px;
-        max-width: 92vw;
+        width: 740px;
+        max-width: 94vw;
         background: #14141f;
         border: 1px solid #2a2a3d;
         border-radius: 16px;
@@ -293,12 +292,24 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
 
         <!-- TAB 2: CONFIGURATION -->
         <div id="tab-config-content" style="display: none; flex-direction: column; gap: 14px;">
-            <div style="font-size: 14px; font-weight: 600; color: #ffbd2e;">Configurar Carpetas de Destino Guardadas:</div>
             
-            <div id="hf-folder-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #0d0d15; padding: 10px; border-radius: 8px; border: 1px solid #222233;"></div>
+            <!-- ComfyUI Base Root Selector -->
+            <div style="background: #1a1a2e; border: 1px solid #333355; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="font-size: 13px; font-weight: 700; color: #ffbd2e; display: flex; align-items: center; gap: 6px;">
+                    <span>🏠 Directorio Raíz de ComfyUI (Auto-detectar carpetas):</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input id="hf-comfy-root-input" type="text" placeholder="Ej: J:\\Comfyui\\AG COMFY\\ComfyUI" style="flex: 1; padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
+                    <button id="hf-save-root-btn" style="padding: 8px 14px; background: #2a2a40; border: 1px solid #555588; border-radius: 6px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;">🔍 Auto-Detectar Subcarpetas</button>
+                </div>
+            </div>
+
+            <div style="font-size: 14px; font-weight: 600; color: #ffbd2e;">Carpetas de Destino Disponibles:</div>
+            
+            <div id="hf-folder-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #0d0d15; padding: 10px; border-radius: 8px; border: 1px solid #222233;"></div>
 
             <div style="border-top: 1px solid #2a2a3d; padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
-                <div style="font-size: 13px; font-weight: 600; color: #fff;" id="folder-form-title">➕ Añadir / Editar Carpeta:</div>
+                <div style="font-size: 13px; font-weight: 600; color: #fff;" id="folder-form-title">➕ Añadir / Editar Carpeta Personalizada:</div>
                 <input id="hf-new-folder-id" type="hidden" />
                 <input id="hf-new-folder-name" type="text" placeholder="Nombre descriptivo (ej: Text Encoders)" style="padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
                 <input id="hf-new-folder-path" type="text" placeholder="Ruta absoluta (ej: J:\\Comfyui\\...\\models\\text_encoders)" style="padding: 8px 12px; background: #0d0d15; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 13px;" />
@@ -341,6 +352,36 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
 
     // Close button
     modal.querySelector("#hf-close-btn").onclick = () => { modalContainer.style.display = "none"; };
+
+    // ComfyUI Root Auto-Detect Handler
+    const saveRootBtn = modal.querySelector("#hf-save-root-btn");
+    const comfyRootInput = modal.querySelector("#hf-comfy-root-input");
+
+    saveRootBtn.onclick = async () => {
+        const rootPath = comfyRootInput.value.trim();
+        if (!rootPath) {
+            alert("Ingresa un directorio de ComfyUI válido.");
+            return;
+        }
+
+        try {
+            const resp = await fetch("/hf_superdownloader/comfy_root", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ root_path: rootPath })
+            });
+            const res = await resp.json();
+            if (res.success) {
+                alert(`✔ Directorio de ComfyUI actualizado y subcarpetas auto-detectadas con éxito!`);
+                renderConfigFolderList();
+                loadFolders();
+            } else {
+                alert(`Error: ${res.error}`);
+            }
+        } catch (e) {
+            alert(`Error actualizando raíz de ComfyUI: ${e.message}`);
+        }
+    };
 
     // Search logic
     const searchBtn = modal.querySelector("#hf-search-btn");
@@ -460,7 +501,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
                 folderNameInput.value = "";
                 folderPathInput.value = "";
                 cancelFolderBtn.style.display = "none";
-                modal.querySelector("#folder-form-title").textContent = "➕ Añadir / Editar Carpeta:";
+                modal.querySelector("#folder-form-title").textContent = "➕ Añadir / Editar Carpeta Personalizada:";
                 renderConfigFolderList();
                 loadFolders();
             } else {
@@ -476,7 +517,7 @@ Ready. Ingresa un enlace o nombre de archivo para comenzar.
         folderNameInput.value = "";
         folderPathInput.value = "";
         cancelFolderBtn.style.display = "none";
-        modal.querySelector("#folder-form-title").textContent = "➕ Añadir / Editar Carpeta:";
+        modal.querySelector("#folder-form-title").textContent = "➕ Añadir / Editar Carpeta Personalizada:";
     };
 
     loadFolders();
@@ -503,6 +544,7 @@ async function loadFolders() {
 
 async function renderConfigFolderList() {
     const listContainer = document.querySelector("#hf-folder-list");
+    const comfyRootInput = document.querySelector("#hf-comfy-root-input");
     if (!listContainer) return;
 
     listContainer.innerHTML = "Cargando...";
@@ -510,6 +552,10 @@ async function renderConfigFolderList() {
     try {
         const resp = await fetch("/hf_superdownloader/folders");
         const res = await resp.json();
+        if (res.comfy_root && comfyRootInput) {
+            comfyRootInput.value = res.comfy_root;
+        }
+
         if (res.folders) {
             listContainer.innerHTML = "";
             res.folders.forEach(f => {

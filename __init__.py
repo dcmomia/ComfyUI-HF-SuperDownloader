@@ -4,26 +4,115 @@ from server import PromptServer
 
 NODE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIRECTORY = "./web"
+CONFIG_FILE = os.path.join(NODE_DIR, "hf_folders.json")
 
 import folder_paths
 
-def get_default_dirs():
-    def _get(cat):
+# Determine default ComfyUI Base Root Directory
+DEFAULT_COMFY_ROOT = getattr(folder_paths, 'base_path', os.path.abspath(os.path.join(NODE_DIR, "..", "..")))
+
+CATEGORIES_FRIENDLY_NAMES = {
+    'loras': 'LoRAs',
+    'diffusion_models': 'Diffusion Models (UNET)',
+    'checkpoints': 'Checkpoints',
+    'text_encoders': 'Text Encoders',
+    'vae': 'VAEs',
+    'controlnet': 'ControlNet',
+    'clip': 'CLIP Models',
+    'unet': 'UNET Models',
+    'upscale_models': 'Upscale Models',
+    'embeddings': 'Embeddings',
+    'hypernetworks': 'Hypernetworks',
+    'clip_vision': 'CLIP Vision',
+    'style_models': 'Style Models',
+    'photomaker': 'PhotoMaker'
+}
+
+PRIORITY_ORDER = [
+    'loras', 'diffusion_models', 'checkpoints', 'text_encoders',
+    'vae', 'controlnet', 'clip', 'unet', 'upscale_models', 'embeddings'
+]
+
+def auto_discover_folders(base_root=None):
+    if not base_root or not os.path.exists(base_root):
+        base_root = DEFAULT_COMFY_ROOT
+        
+    found_dirs = {}
+    
+    # 1. Use folder_paths from ComfyUI
+    try:
+        if hasattr(folder_paths, 'folder_names_and_paths'):
+            for cat, val in folder_paths.folder_names_and_paths.items():
+                paths = val[0] if isinstance(val, tuple) or isinstance(val, list) else []
+                if paths:
+                    first_path = paths[0]
+                    clean_id = cat.lower().replace(' ', '_')
+                    friendly_name = CATEGORIES_FRIENDLY_NAMES.get(clean_id, cat.capitalize())
+                    found_dirs[clean_id] = [friendly_name, os.path.abspath(first_path)]
+    except Exception:
+        pass
+        
+    # 2. Scan <base_root>/models/ directory for all subdirectories
+    models_dir = os.path.join(base_root, "models")
+    if os.path.exists(models_dir):
         try:
-            p = folder_paths.get_folder_paths(cat)
-            if p and len(p) > 0:
-                return p[0]
+            for entry in sorted(os.listdir(models_dir)):
+                full_p = os.path.join(models_dir, entry)
+                if os.path.isdir(full_p):
+                    clean_id = entry.lower().replace(' ', '_')
+                    if clean_id not in found_dirs:
+                        friendly_name = CATEGORIES_FRIENDLY_NAMES.get(clean_id, entry.replace('_', ' ').title())
+                        found_dirs[clean_id] = [friendly_name, os.path.abspath(full_p)]
         except Exception:
             pass
-        return os.path.abspath(os.path.join(NODE_DIR, "..", "..", "models", cat))
 
-    return {
-        'loras': ['LoRAs', _get('loras')],
-        'diffusion_models': ['Diffusion Models', _get('diffusion_models')],
-        'checkpoints': ['Checkpoints', _get('checkpoints')],
-        'vae': ['VAEs', _get('vae')],
-        'controlnet': ['ControlNet', _get('controlnet')]
+    return found_dirs
+
+def load_config():
+    comfy_root = DEFAULT_COMFY_ROOT
+    custom_dirs = {}
+    
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+                if isinstance(saved, dict):
+                    comfy_root = saved.get("comfy_root", DEFAULT_COMFY_ROOT)
+                    raw_dirs = saved.get("custom_folders", {})
+                    # Handle backward compatibility
+                    if not raw_dirs and any(isinstance(v, list) for v in saved.values()):
+                        raw_dirs = {k: v for k, v in saved.items() if k != "comfy_root" and isinstance(v, list)}
+                    
+                    for k, v in raw_dirs.items():
+                        key_clean = k.lower().replace(' ', '_')
+                        custom_dirs[key_clean] = v
+        except Exception:
+            pass
+            
+    # Auto-discover based on active comfy_root
+    discovered = auto_discover_folders(comfy_root)
+    # Merge custom user overrides on top of discovered folders
+    for k, v in custom_dirs.items():
+        discovered[k] = v
+
+    # Sort dictionary: priority categories first
+    sorted_dirs = {}
+    for p in PRIORITY_ORDER:
+        if p in discovered:
+            sorted_dirs[p] = discovered[p]
+    for k, v in discovered.items():
+        if k not in sorted_dirs:
+            sorted_dirs[k] = v
+
+    return comfy_root, sorted_dirs
+
+def save_config(comfy_root, custom_folders):
+    data = {
+        "comfy_root": comfy_root,
+        "custom_folders": custom_folders
     }
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
 
 POPULAR_REPOS = [
     'Kijai/LTX2.3_comfy',
@@ -48,23 +137,6 @@ def norm(s):
     if not s:
         return ""
     return re.sub(r'[\-_]', '', s.lower())
-
-def load_dirs():
-    dirs = dict(get_default_dirs())
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                saved = json.load(f)
-                for k, v in saved.items():
-                    key_clean = k.lower().replace(' ', '_')
-                    dirs[key_clean] = v
-        except Exception:
-            pass
-    return dirs
-
-def save_all_dirs(dirs):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(dirs, f, indent=2)
 
 def parse_hf_url(url_input):
     url_input = url_input.strip()
@@ -109,36 +181,6 @@ def search_hf_auto(target_input):
     if found_matches:
         unique = list(dict.fromkeys(found_matches))
         return unique[0][0], unique[0][1], unique
-        
-    # 2. General Hugging Face API search
-    words = [w for w in re.sub(r'[\._\-]', ' ', filename_only).split() if len(w) > 2 and w.lower() not in ['safetensors', 'ckpt', 'pth', 'bin']]
-    search_query = '+'.join(words[:3]) if words else filename_only
-    
-    search_url = f'https://huggingface.co/api/models?search={search_query}&limit=15'
-    try:
-        req = urllib.request.Request(search_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-            for m in data:
-                r_id = m.get('id')
-                try:
-                    tree_url = f'https://huggingface.co/api/models/{r_id}/tree/main?recursive=true'
-                    with urllib.request.urlopen(urllib.request.Request(tree_url, headers={'User-Agent': 'Mozilla/5.0'}), timeout=3) as t_resp:
-                        files_tree = json.loads(t_resp.read().decode())
-                        for item in files_tree:
-                            if item.get('type') == 'file':
-                                path = item.get('path', '')
-                                p_norm = norm(os.path.basename(path))
-                                if u_norm == p_norm or u_norm in norm(path):
-                                    found_matches.append((r_id, path))
-                except Exception:
-                    pass
-    except Exception:
-        pass
-        
-    if found_matches:
-        unique = list(dict.fromkeys(found_matches))
-        return unique[0][0], unique[0][1], unique
 
     return None, None, []
 
@@ -151,11 +193,11 @@ def init_routes():
 
     @routes.get("/hf_superdownloader/folders")
     async def get_folders(request):
-        dirs = load_dirs()
+        comfy_root, dirs = load_config()
         folder_list = []
         for k, v in dirs.items():
             folder_list.append({"id": k, "name": v[0], "path": v[1]})
-        return web.json_response({"folders": folder_list})
+        return web.json_response({"comfy_root": comfy_root, "folders": folder_list})
 
     @routes.post("/hf_superdownloader/folders/save")
     async def save_folders_endpoint(request):
@@ -167,24 +209,51 @@ def init_routes():
         if not name or not path:
             return web.json_response({"success": False, "error": "Nombre y ruta requeridos"})
             
-        dirs = load_dirs()
+        comfy_root, dirs = load_config()
         if not folder_id:
             folder_id = name.lower().replace(' ', '_')
             
         dirs[folder_id] = [name, path]
-        save_all_dirs(dirs)
+        save_config(comfy_root, dirs)
         return web.json_response({"success": True})
 
     @routes.post("/hf_superdownloader/folders/delete")
     async def delete_folder_endpoint(request):
         data = await request.json()
         folder_id = data.get("id")
-        dirs = load_dirs()
+        comfy_root, dirs = load_config()
         if folder_id in dirs:
             del dirs[folder_id]
-            save_all_dirs(dirs)
+            save_config(comfy_root, dirs)
             return web.json_response({"success": True})
         return web.json_response({"success": False, "error": "Carpeta no encontrada"})
+
+    @routes.get("/hf_superdownloader/comfy_root")
+    async def get_comfy_root_endpoint(request):
+        comfy_root, _ = load_config()
+        return web.json_response({"comfy_root": comfy_root})
+
+    @routes.post("/hf_superdownloader/comfy_root")
+    async def set_comfy_root_endpoint(request):
+        data = await request.json()
+        root_path = data.get("root_path", "").strip()
+        if not root_path or not os.path.exists(root_path):
+            return web.json_response({"success": False, "error": "El directorio especificado no existe"})
+            
+        # Re-discover all model subfolders in new root_path
+        abs_root = os.path.abspath(root_path)
+        discovered = auto_discover_folders(abs_root)
+        save_config(abs_root, discovered)
+        
+        folder_list = []
+        for k, v in discovered.items():
+            folder_list.append({"id": k, "name": v[0], "path": v[1]})
+            
+        return web.json_response({
+            "success": True,
+            "comfy_root": abs_root,
+            "folders": folder_list
+        })
 
     @routes.post("/hf_superdownloader/search")
     async def search_endpoint(request):
@@ -281,4 +350,4 @@ init_routes()
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-print("[HF SuperDownloader] Custom Node backend loaded successfully!")
+print("[HF SuperDownloader] Custom Node backend loaded successfully with ComfyUI Root Auto-Discovery!")
