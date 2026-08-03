@@ -1,4 +1,4 @@
-import { app } from "../../scripts/app.js";
+import { app } from "/scripts/app.js";
 
 app.registerExtension({
     name: "ComfyUI.HFSuperDownloader",
@@ -11,6 +11,7 @@ app.registerExtension({
 let modalContainer = null;
 let pollInterval = null;
 let allLoadedFolders = [];
+let openLogs = {};
 
 // i18n Translations Dictionary (English Default)
 const i18n = {
@@ -26,11 +27,11 @@ const i18n = {
         placeholderInput: "Ej: ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
         placeholderFolder: "Escribe para buscar o haz clic para ver carpetas...",
         btnSearch: "🔍 Buscar",
-        btnDownload: "⚡ DESCARGAR A MÁXIMA VELOCIDAD (HF_TRANSFER)",
-        terminalLog: "💻 TERMINAL LOG EN TIEMPO REAL:",
+        btnDownload: "⚡ AÑADIR A COLA DE DESCARGA (HF_TRANSFER)",
+        terminalLog: "💻 TAREAS Y DESCARGAS ACTIVAS:",
         searching: "⏳ Buscando en Hugging Face...",
         found: "✔ Encontrado:",
-        readyLog: "Ready. Ingresa un enlace o nombre de archivo para comenzar.",
+        readyLog: "Ingresa un enlace o nombre de archivo para comenzar.",
         rootTitle: "🏠 DIRECTORIO RAÍZ DE COMFYUI (AUTO-DETECTAR):",
         btnAutoDetect: "Auto-Detectar Subcarpetas",
         availableFolders: "CARPETAS DE DESTINO DISPONIBLES:",
@@ -45,7 +46,17 @@ const i18n = {
         alertFillFields: "Completa el nombre y la ruta de la carpeta.",
         alertValidRoot: "Ingresa un directorio de ComfyUI válido.",
         alertRootSuccess: "✔ Directorio de ComfyUI actualizado y subcarpetas auto-detectadas con éxito!",
-        alertNotFound: "No se pudo resolver el repositorio de Hugging Face. Verifica el nombre."
+        alertNotFound: "No se pudo resolver el repositorio de Hugging Face. Verifica el nombre.",
+        btnClearCompleted: "Limpiar Completadas",
+        btnCancelJob: "Cancelar",
+        btnToggleLogs: "Ver Logs",
+        speedLabel: "Velocidad:",
+        etaLabel: "Tiempo Restante:",
+        statusDownloading: "DESCARGANDO",
+        statusCompleted: "COMPLETADO",
+        statusError: "ERROR",
+        statusCancelled: "CANCELADO",
+        statusStarting: "INICIANDO"
     },
     en: {
         titlePrefix: "HUGGING FACE",
@@ -59,11 +70,11 @@ const i18n = {
         placeholderInput: "E.g. ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
         placeholderFolder: "Type to search or click to view folders...",
         btnSearch: "🔍 Search",
-        btnDownload: "⚡ DOWNLOAD AT MAX SPEED (HF_TRANSFER)",
-        terminalLog: "💻 REAL-TIME TERMINAL LOG:",
+        btnDownload: "⚡ ADD TO DOWNLOAD QUEUE (HF_TRANSFER)",
+        terminalLog: "💻 ACTIVE DOWNLOAD QUEUE & TASKS:",
         searching: "⏳ Searching Hugging Face...",
         found: "✔ Found:",
-        readyLog: "Ready. Enter a link or filename to start.",
+        readyLog: "Enter a link or filename to start.",
         rootTitle: "🏠 COMFYUI BASE ROOT DIRECTORY (AUTO-DETECT):",
         btnAutoDetect: "Auto-Detect Subfolders",
         availableFolders: "AVAILABLE DESTINATION FOLDERS:",
@@ -78,7 +89,17 @@ const i18n = {
         alertFillFields: "Please fill out both the name and folder path.",
         alertValidRoot: "Please enter a valid ComfyUI root directory.",
         alertRootSuccess: "✔ ComfyUI root directory updated and subfolders auto-detected successfully!",
-        alertNotFound: "Could not resolve Hugging Face repository. Check the filename or URL."
+        alertNotFound: "Could not resolve Hugging Face repository. Check the filename or URL.",
+        btnClearCompleted: "Clear Completed",
+        btnCancelJob: "Cancel",
+        btnToggleLogs: "View Logs",
+        speedLabel: "Speed:",
+        etaLabel: "Time Left:",
+        statusDownloading: "DOWNLOADING",
+        statusCompleted: "COMPLETADO",
+        statusError: "ERROR",
+        statusCancelled: "CANCELLED",
+        statusStarting: "STARTING"
     }
 };
 
@@ -175,7 +196,7 @@ function createFloatingButton() {
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #27ae60;
+            background: #2ecc71;
             border: 1px solid #000;
             cursor: ${cursorType};
             z-index: 10001;
@@ -199,34 +220,32 @@ function createFloatingButton() {
     let activeHandle = null;
     let hasMoved = false;
     let startX = 0, startY = 0;
-    let initialLeft = 0, initialTop = 0;
-    let initialSize = savedSize;
+    let startLeft = 0, startTop = 0;
+    let startW = 0, startH = 0;
 
-    btn.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return;
-
-        const handle = e.target.closest(".hf-resize-handle");
-        startX = e.clientX;
-        startY = e.clientY;
-        const rect = btn.getBoundingClientRect();
-        initialLeft = rect.left;
-        initialTop = rect.top;
-        initialSize = rect.width;
-        hasMoved = false;
-
-        if (handle) {
+    btn.onmousedown = (e) => {
+        if (e.target.classList.contains("hf-resize-handle")) {
             isDraggingResize = true;
-            activeHandle = handle;
-            e.stopPropagation();
+            activeHandle = e.target;
         } else {
             isDraggingMove = true;
         }
+        hasMoved = false;
+        startX = e.clientX;
+        startY = e.clientY;
 
-        btn.style.transition = "none";
+        const rect = btn.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+        startW = rect.width;
+        startH = rect.height;
+
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
         e.preventDefault();
-    });
+    };
 
-    window.addEventListener("mousemove", (e) => {
+    function onMouseMove(e) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
 
@@ -235,67 +254,75 @@ function createFloatingButton() {
         }
 
         if (isDraggingMove) {
-            let newLeft = initialLeft + dx;
-            let newTop = initialTop + dy;
+            let newLeft = startLeft + dx;
+            let newTop = startTop + dy;
 
-            newLeft = Math.max(10, Math.min(window.innerWidth - initialSize - 10, newLeft));
-            newTop = Math.max(10, Math.min(window.innerHeight - initialSize - 10, newTop));
+            newLeft = Math.max(10, Math.min(window.innerWidth - startW - 10, newLeft));
+            newTop = Math.max(10, Math.min(window.innerHeight - startH - 10, newTop));
 
-            btn.style.left = newLeft + "px";
-            btn.style.top = newTop + "px";
+            btn.style.left = `${newLeft}px`;
+            btn.style.top = `${newTop}px`;
             btn.style.bottom = "auto";
             btn.style.right = "auto";
         } else if (isDraggingResize) {
             let delta = dx;
-            if (activeHandle.className.includes("nw") || activeHandle.className.includes("sw")) {
+            if (activeHandle.classList.contains("hf-handle-sw") || activeHandle.classList.contains("hf-handle-nw")) {
                 delta = -dx;
             }
-            
-            let newSize = initialSize + delta;
-            newSize = Math.max(32, Math.min(160, newSize));
+            let newSize = Math.max(30, Math.min(160, startW + delta));
+            btn.style.width = `${newSize}px`;
+            btn.style.height = `${newSize}px`;
 
-            btn.style.width = newSize + "px";
-            btn.style.height = newSize + "px";
+            if (activeHandle.classList.contains("hf-handle-nw") || activeHandle.classList.contains("hf-handle-sw")) {
+                let newLeft = startLeft - (newSize - startW);
+                btn.style.left = `${newLeft}px`;
+            }
+            if (activeHandle.classList.contains("hf-handle-nw") || activeHandle.classList.contains("hf-handle-ne")) {
+                let newTop = startTop - (newSize - startH);
+                btn.style.top = `${newTop}px`;
+            }
         }
-    });
+    }
 
-    window.addEventListener("mouseup", () => {
+    function onMouseUp() {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+
         if (isDraggingMove || isDraggingResize) {
-            btn.style.transition = "transform 0.15s ease-out";
-
             const rect = btn.getBoundingClientRect();
-            
-            if (isDraggingMove) {
-                localStorage.setItem("hf_fab_position", JSON.stringify({ left: rect.left, top: rect.top }));
-            }
-            if (isDraggingResize) {
-                localStorage.setItem("hf_fab_size", rect.width);
-            }
-
-            isDraggingMove = false;
-            isDraggingResize = false;
-            activeHandle = null;
+            localStorage.setItem("hf_fab_position", JSON.stringify({ left: rect.left, top: rect.top }));
+            localStorage.setItem("hf_fab_size", rect.width.toString());
         }
-    });
+
+        isDraggingMove = false;
+        isDraggingResize = false;
+        activeHandle = null;
+    }
 
     btn.onclick = (e) => {
-        if (!hasMoved) {
-            openModal();
-        }
+        if (hasMoved) return;
+        toggleModal();
     };
 
     document.body.appendChild(btn);
 }
 
-async function openModal() {
-    if (modalContainer) {
+function toggleModal() {
+    if (!modalContainer) {
+        createModal();
+    }
+    if (modalContainer.style.display === "none" || !modalContainer.style.display) {
         modalContainer.style.display = "flex";
         loadFolders();
-        return;
+        startPollingStatus();
+    } else {
+        modalContainer.style.display = "none";
     }
+}
 
+function createModal() {
     modalContainer = document.createElement("div");
-    modalContainer.className = "hf-downloader-modal-overlay";
+    modalContainer.id = "hf-modal-overlay";
     modalContainer.style.cssText = `
         position: fixed;
         top: 0;
@@ -312,8 +339,10 @@ async function openModal() {
 
     const modal = document.createElement("div");
     modal.style.cssText = `
-        width: 780px;
+        width: 820px;
         max-width: 95vw;
+        max-height: 92vh;
+        overflow-y: auto;
         background: #070d08;
         border: 2px solid #1e7e40;
         outline: 1.5px solid #104221;
@@ -330,7 +359,7 @@ async function openModal() {
 
     modal.innerHTML = `
         <style>
-            @keyframes hfBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+            @keyframes hfPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
             .pepe-card-box {
                 background: #0c180e;
                 border: 1.5px solid #1e7e40;
@@ -367,9 +396,55 @@ async function openModal() {
                 background: #112616;
                 color: #ffffff;
             }
+            .hf-job-card {
+                background: #040805;
+                border: 1.5px solid #142a17;
+                border-radius: 6px;
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .hf-job-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .hf-job-title {
+                font-weight: 700;
+                color: #ffffff;
+                font-size: 13px;
+                font-family: 'Consolas', monospace;
+            }
+            .hf-badge {
+                font-size: 10px;
+                padding: 3px 8px;
+                border-radius: 3px;
+                font-weight: 800;
+                letter-spacing: 0.5px;
+            }
+            .hf-badge-downloading { background: #0e381b; color: #2ecc71; border: 1px solid #1e7e40; animation: hfPulse 1.5s infinite; }
+            .hf-badge-completed { background: #143d22; color: #2ecc71; border: 1px solid #2ecc71; }
+            .hf-badge-error { background: #3d1414; color: #ff5555; border: 1px solid #ff5555; }
+            .hf-badge-cancelled { background: #262626; color: #888888; border: 1px solid #555555; }
+            .hf-badge-starting { background: #1f3322; color: #a3e0b8; border: 1px solid #2ecc71; }
+            .hf-progress-bar-bg {
+                width: 100%;
+                height: 10px;
+                background: #09120a;
+                border: 1px solid #142a17;
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            .hf-progress-bar-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #165b2e 0%, #2ecc71 100%);
+                width: 0%;
+                transition: width 0.3s ease;
+            }
         </style>
 
-        <!-- Muted Tactical Emerald Header Banner -->
+        <!-- Header Banner -->
         <div style="background: #0e1e12; border: 1.5px solid #1e7e40; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 14px;">
                 <div style="width: 48px; height: 48px; border-radius: 50%; overflow: hidden;">
@@ -403,8 +478,6 @@ async function openModal() {
                 <div style="position: relative; width: 100%;">
                     <input id="hf-folder-input" type="text" placeholder="${t("placeholderFolder")}" class="pepe-input-field" style="padding-right: 36px;" />
                     <button id="hf-folder-toggle-btn" style="position: absolute; right: 4px; top: 4px; bottom: 4px; width: 30px; background: transparent; border: none; color: #2ecc71; font-size: 11px; cursor: pointer;">▼</button>
-                    
-                    <!-- Floating Dropdown Menu -->
                     <div id="hf-folder-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; width: 100%; max-height: 220px; overflow-y: auto; background: #060b07; border: 1.5px solid #1e7e40; border-radius: 4px; z-index: 10005; box-shadow: 0 8px 25px rgba(0,0,0,0.95);"></div>
                 </div>
             </div>
@@ -427,18 +500,23 @@ async function openModal() {
                 ${t("btnDownload")}
             </button>
 
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: #2ecc71; margin-bottom: 6px; letter-spacing: 0.5px;">${t("terminalLog")}</label>
-                <div id="hf-log-box" style="height: 160px; background: #040805; border: 1.5px solid #142a17; border-radius: 4px; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; color: #2ecc71; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
-${t("readyLog")}
+            <!-- Multi-Download Queue Section -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                <label style="font-size: 12px; font-weight: 800; color: #2ecc71; letter-spacing: 0.5px;">${t("terminalLog")}</label>
+                <button id="hf-clear-completed-btn" style="padding: 4px 10px; background: #0e1e12; border: 1px solid #1e7e40; border-radius: 3px; color: #2ecc71; font-size: 11px; cursor: pointer; font-family: 'Consolas', monospace;">
+                    ${t("btnClearCompleted")}
+                </button>
+            </div>
+
+            <div id="hf-jobs-container" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #040805; padding: 10px; border-radius: 4px; border: 1.5px solid #142a17;">
+                <div style="color: #447755; font-size: 12px; font-family: 'Consolas', monospace; text-align: center; padding: 16px;">
+                    ${t("readyLog")}
                 </div>
             </div>
         </div>
 
         <!-- TAB 2: CONFIGURATION -->
         <div id="tab-config-content" class="pepe-card-box" style="display: none;">
-            
-            <!-- ComfyUI Base Root Selector -->
             <div style="background: #060b07; border: 1.5px solid #142a17; border-radius: 4px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
                 <div style="font-size: 12px; font-weight: 800; color: #2ecc71; display: flex; align-items: center; gap: 6px;">
                     <span>${t("rootTitle")}</span>
@@ -450,7 +528,6 @@ ${t("readyLog")}
             </div>
 
             <div style="font-size: 13px; font-weight: 800; color: #2ecc71; letter-spacing: 0.5px;">${t("availableFolders")}</div>
-            
             <div id="hf-folder-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #040805; padding: 10px; border-radius: 4px; border: 1.5px solid #142a17;"></div>
 
             <div style="border-top: 1.5px solid #142a17; padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
@@ -470,7 +547,7 @@ ${t("readyLog")}
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
 
-    // Setup Custom Combobox Behavior for Folder Input
+    // Setup Combobox Behavior
     const folderInput = modal.querySelector("#hf-folder-input");
     const folderToggleBtn = modal.querySelector("#hf-folder-toggle-btn");
     const dropdownMenu = modal.querySelector("#hf-folder-dropdown-menu");
@@ -520,7 +597,6 @@ ${t("readyLog")}
         dropdownMenu.style.display = "block";
     };
 
-    // Close dropdown on outside click
     modalContainer.addEventListener("click", (e) => {
         if (!e.target.closest("#hf-folder-input") && !e.target.closest("#hf-folder-toggle-btn") && !e.target.closest("#hf-folder-dropdown-menu")) {
             if (dropdownMenu) dropdownMenu.style.display = "none";
@@ -590,7 +666,7 @@ ${t("readyLog")}
     const urlInput = modal.querySelector("#hf-url-input");
     const resultBox = modal.querySelector("#hf-search-result");
     const downloadBtn = modal.querySelector("#hf-download-btn");
-    const logBox = modal.querySelector("#hf-log-box");
+    const clearCompletedBtn = modal.querySelector("#hf-clear-completed-btn");
 
     let currentResolved = null;
 
@@ -655,10 +731,6 @@ ${t("readyLog")}
             return;
         }
 
-        logBox.innerHTML = `⚡ [START] Downloading ${currentResolved.filename} from ${currentResolved.repo_id}...\n[TARGET] ${targetPath}\n\n`;
-        downloadBtn.disabled = true;
-        downloadBtn.style.opacity = "0.5";
-
         try {
             const resp = await fetch("/hf_superdownloader/download", {
                 method: "POST",
@@ -671,17 +743,24 @@ ${t("readyLog")}
             });
             const res = await resp.json();
             if (res.success) {
+                // Clear input URL so user can enter another one right away!
+                urlInput.value = "";
+                currentResolved = null;
+                resultBox.style.display = "none";
                 startPollingStatus();
             } else {
                 alert(`Error: ${res.error}`);
-                downloadBtn.disabled = false;
-                downloadBtn.style.opacity = "1";
             }
         } catch (e) {
             alert(`Error: ${e.message}`);
-            downloadBtn.disabled = false;
-            downloadBtn.style.opacity = "1";
         }
+    };
+
+    clearCompletedBtn.onclick = async () => {
+        try {
+            await fetch("/hf_superdownloader/clear_completed", { method: "POST" });
+            pollStatusOnce();
+        } catch(e) {}
     };
 
     const saveFolderBtn = modal.querySelector("#hf-save-folder-btn");
@@ -812,32 +891,99 @@ async function renderConfigFolderList() {
     }
 }
 
+async function pollStatusOnce() {
+    const jobsContainer = document.querySelector("#hf-jobs-container");
+    if (!jobsContainer) return;
+
+    try {
+        const resp = await fetch("/hf_superdownloader/status");
+        const res = await resp.json();
+        const jobs = res.jobs || {};
+        const jobKeys = Object.keys(jobs);
+
+        if (jobKeys.length === 0) {
+            jobsContainer.innerHTML = `<div style="color: #447755; font-size: 12px; font-family: 'Consolas', monospace; text-align: center; padding: 16px;">${t("readyLog")}</div>`;
+            return;
+        }
+
+        // Render each job card
+        jobsContainer.innerHTML = "";
+        jobKeys.reverse().forEach(jid => {
+            const job = jobs[jid];
+            const card = document.createElement("div");
+            card.className = "hf-job-card";
+
+            let badgeClass = `hf-badge-${job.status}`;
+            let statusText = t(`status${job.status.charAt(0).toUpperCase() + job.status.slice(1)}`) || job.status.toUpperCase();
+
+            const isLogsOpen = !!openLogs[jid];
+
+            card.innerHTML = `
+                <div class="hf-job-header">
+                    <div style="flex: 1; overflow: hidden; margin-right: 10px;">
+                        <div class="hf-job-title">${job.filename}</div>
+                        <div style="font-size: 10px; color: #447755; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                            ${job.repo_id} &rarr; ${job.target_path}
+                        </div>
+                    </div>
+                    <span class="hf-badge ${badgeClass}">${statusText}</span>
+                </div>
+
+                <div class="hf-progress-bar-bg">
+                    <div class="hf-progress-bar-fill" style="width: ${job.progress}%;"></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #2ecc71; font-family: 'Consolas', monospace;">
+                    <div>
+                        <b>${job.progress}%</b> 
+                        <span style="color:#68d89b; margin-left: 10px;">${t("speedLabel")} ${job.speed}</span>
+                        <span style="color:#68d89b; margin-left: 10px;">${t("etaLabel")} ${job.eta}</span>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="toggle-log-btn" style="padding: 3px 8px; background: #0e1e12; border: 1px solid #1e7e40; border-radius: 3px; color: #2ecc71; font-size: 10px; cursor: pointer;">
+                            ${t("btnToggleLogs")}
+                        </button>
+                        ${job.status === "downloading" || job.status === "starting" ? `
+                            <button class="cancel-job-btn" style="padding: 3px 8px; background: #3d1414; border: 1px solid #ff5555; border-radius: 3px; color: #ff5555; font-size: 10px; cursor: pointer;">
+                                ${t("btnCancelJob")}
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <div class="job-log-box" style="display: ${isLogsOpen ? 'block' : 'none'}; height: 90px; background: #020402; border: 1px solid #142a17; border-radius: 3px; padding: 6px; font-size: 10px; color: #2ecc71; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-top: 4px;">
+                    ${(job.logs || []).join("\n")}
+                </div>
+            `;
+
+            card.querySelector(".toggle-log-btn").onclick = () => {
+                openLogs[jid] = !openLogs[jid];
+                const logBox = card.querySelector(".job-log-box");
+                logBox.style.display = openLogs[jid] ? "block" : "none";
+            };
+
+            const cancelBtn = card.querySelector(".cancel-job-btn");
+            if (cancelBtn) {
+                cancelBtn.onclick = async () => {
+                    await fetch("/hf_superdownloader/cancel", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ job_id: jid })
+                    });
+                    pollStatusOnce();
+                };
+            }
+
+            jobsContainer.appendChild(card);
+        });
+
+    } catch (e) {
+        console.error("Error polling status:", e);
+    }
+}
+
 function startPollingStatus() {
     if (pollInterval) clearInterval(pollInterval);
-    
-    const downloadBtn = document.querySelector("#hf-download-btn");
-    const logBox = document.querySelector("#hf-log-box");
-
-    pollInterval = setInterval(async () => {
-        try {
-            const resp = await fetch("/hf_superdownloader/status");
-            const res = await resp.json();
-
-            if (logBox && res.logs) {
-                logBox.innerHTML = res.logs.join("\n");
-                logBox.scrollTop = logBox.scrollHeight;
-            }
-
-            if (!res.is_running) {
-                clearInterval(pollInterval);
-                pollInterval = null;
-                if (downloadBtn) {
-                    downloadBtn.disabled = false;
-                    downloadBtn.style.opacity = "1";
-                }
-            }
-        } catch (e) {
-            console.error("Error polling status:", e);
-        }
-    }, 1000);
+    pollStatusOnce();
+    pollInterval = setInterval(pollStatusOnce, 1000);
 }

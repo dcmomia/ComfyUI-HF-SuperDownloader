@@ -1,4 +1,4 @@
-import os, sys, re, json, subprocess, urllib.request, threading
+import os, sys, re, json, subprocess, urllib.request, threading, time, uuid
 from aiohttp import web
 from server import PromptServer
 
@@ -125,13 +125,38 @@ POPULAR_REPOS = [
     'black-forest-labs/FLUX.1-dev'
 ]
 
-# Global download state
-active_download = {
-    "is_running": False,
-    "status": "idle",
-    "logs": [],
-    "process": None
-}
+class DownloadJob:
+    def __init__(self, job_id, repo_id, filename, target_path):
+        self.job_id = job_id
+        self.repo_id = repo_id
+        self.filename = filename
+        self.target_path = target_path
+        self.status = "starting"  # starting, downloading, completed, error, cancelled
+        self.progress = 0.0
+        self.speed = "-- B/s"
+        self.eta = "--:--"
+        self.downloaded_bytes = 0
+        self.total_bytes = 0
+        self.logs = []
+        self.process = None
+        self.start_time = time.time()
+
+    def to_dict(self):
+        return {
+            "job_id": self.job_id,
+            "repo_id": self.repo_id,
+            "filename": self.filename,
+            "target_path": self.target_path,
+            "status": self.status,
+            "progress": round(self.progress, 1),
+            "speed": self.speed,
+            "eta": self.eta,
+            "downloaded_bytes": self.downloaded_bytes,
+            "total_bytes": self.total_bytes,
+            "logs": self.logs[-50:]
+        }
+
+active_downloads = {}  # job_id -> DownloadJob
 
 def norm(s):
     if not s:
@@ -140,7 +165,7 @@ def norm(s):
 
 def parse_hf_url(url_input):
     url_input = url_input.strip()
-    m = re.match(r'https?://huggingface\.co/([^/]+/[^/]+)/(?:blob|resolve)/[^/]+/(.+)', url_input)
+    m = re.match(r'https?://huggingface\.co/([^/]+/[^/]+)/(?:blob|resolve|tree)/[^/]+/(.+)', url_input)
     if m:
         return m.group(1), m.group(2)
     return None, None
@@ -153,10 +178,11 @@ def search_hf_auto(target_input):
 
     if '/' in target_file and not target_file.startswith('http'):
         parts = target_file.split('/')
-        if len(parts) >= 2 and not target_file.endswith('.safetensors') and not target_file.endswith('.ckpt'):
+        if len(parts) >= 2:
             r = parts[0] + '/' + parts[1]
             f = '/'.join(parts[2:]) if len(parts) > 2 else ""
-            return r, f, [(r, f)]
+            if f:
+                return r, f, [(r, f)]
 
     filename_only = os.path.basename(target_file)
     u_norm = norm(filename_only)
@@ -182,7 +208,174 @@ def search_hf_auto(target_input):
         unique = list(dict.fromkeys(found_matches))
         return unique[0][0], unique[0][1], unique
 
+    # 2. General Hugging Face API search by tokens
+    words = [w for w in re.sub(r'[\._\-]', ' ', filename_only).split() if len(w) > 2 and w.lower() not in ['safetensors', 'ckpt', 'pth', 'bin']]
+    search_query = '+'.join(words[:3]) if words else filename_only
+    
+    search_url = f'https://huggingface.co/api/models?search={search_query}&limit=15'
+    try:
+        req = urllib.request.Request(search_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            for m in data:
+                repo_id_api = m.get('id')
+                try:
+                    tree_url = f'https://huggingface.co/api/models/{repo_id_api}/tree/main?recursive=true'
+                    with urllib.request.urlopen(urllib.request.Request(tree_url, headers={'User-Agent': 'Mozilla/5.0'}), timeout=3) as t_resp:
+                        files_tree = json.loads(t_resp.read().decode())
+                        for item in files_tree:
+                            if item.get('type') == 'file':
+                                path = item.get('path', '')
+                                p_norm = norm(os.path.basename(path))
+                                if u_norm == p_norm or u_norm in norm(path):
+                                    found_matches.append((repo_id_api, path))
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f'[HF SuperDownloader] Error en API search: {e}')
+        
+    if found_matches:
+        unique = list(dict.fromkeys(found_matches))
+        return unique[0][0], unique[0][1], unique
+
     return None, None, []
+
+def run_download_worker(job):
+    job.status = "downloading"
+    job.start_time = time.time()
+    job.logs.append(f"[START] Descargando {job.filename} desde {job.repo_id}...")
+    job.logs.append(f"[TARGET] {job.target_path}")
+
+    os.makedirs(job.target_path, exist_ok=True)
+    env = dict(os.environ)
+    env['HF_HUB_ENABLE_HF_TRANSFER'] = '1'
+
+    cmd = [sys.executable, '-m', 'huggingface_hub.cli.hf', 'download', job.repo_id, job.filename, '--local-dir', job.target_path]
+
+    progress_pattern = re.compile(r'(\d+(?:\.\d+)?)%\s*\|?.*?[\s\:]+([\d\.]+\s*[KMGT]?B/s|[\d\.]+\s*B/s)?\s*\[?([\d:]+)<([\d:]+)', re.IGNORECASE)
+    fallback_speed_pattern = re.compile(r'([\d\.]+\s*[KMGT]?B/s)', re.IGNORECASE)
+    fallback_pct_pattern = re.compile(r'(\d+(?:\.\d+)?)%', re.IGNORECASE)
+
+    try:
+        process = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        job.process = process
+
+        for line in process.stdout:
+            if job.status == "cancelled":
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+                break
+
+            line_str = line.strip()
+            if not line_str:
+                continue
+
+            job.logs.append(line_str)
+            if len(job.logs) > 200:
+                job.logs = job.logs[-150:]
+
+            # Try to match tqdm / hf progress pattern
+            match = progress_pattern.search(line_str)
+            if match:
+                job.progress = float(match.group(1))
+                if match.group(2):
+                    job.speed = match.group(2).strip()
+                if match.group(4):
+                    job.eta = match.group(4).strip()
+            else:
+                pct_match = fallback_pct_pattern.search(line_str)
+                if pct_match:
+                    job.progress = float(pct_match.group(1))
+                spd_match = fallback_speed_pattern.search(line_str)
+                if spd_match:
+                    job.speed = spd_match.group(1).strip()
+
+        process.wait()
+        if job.status == "cancelled":
+            job.logs.append("[CANCELLED] Descarga cancelada por el usuario.")
+        elif process.returncode == 0:
+            job.status = "completed"
+            job.progress = 100.0
+            job.speed = "0 B/s"
+            job.eta = "00:00"
+            job.logs.append("[OK] DESCARGA COMPLETADA CON EXITO!")
+        else:
+            job.logs.append(f"[!] Falló la descarga con huggingface-cli (código {process.returncode}). Intentando fallback con urllib...")
+            
+            # Fallback direct download
+            endpoint = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
+            file_url = f"{endpoint}/{job.repo_id}/resolve/main/{job.filename}"
+            dest_file = os.path.join(job.target_path, os.path.basename(job.filename))
+
+            req = urllib.request.Request(file_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req) as response, open(dest_file, 'wb') as out_file:
+                total_size = int(response.info().get('Content-Length', 0))
+                job.total_bytes = total_size
+                downloaded = 0
+                chunk_size = 128 * 1024
+                start_t = time.time()
+                last_t = start_t
+                last_bytes = 0
+
+                while job.status != "cancelled":
+                    buffer = response.read(chunk_size)
+                    if not buffer:
+                        break
+                    out_file.write(buffer)
+                    downloaded += len(buffer)
+                    job.downloaded_bytes = downloaded
+                    now = time.time()
+
+                    if total_size > 0:
+                        job.progress = (downloaded / total_size) * 100
+
+                    if now - last_t >= 0.5:
+                        dt = now - last_t
+                        db = downloaded - last_bytes
+                        speed_bps = db / dt if dt > 0 else 0
+                        if speed_bps > 1024 * 1024:
+                            job.speed = f"{speed_bps / (1024*1024):.2f} MB/s"
+                        elif speed_bps > 1024:
+                            job.speed = f"{speed_bps / 1024:.1f} KB/s"
+                        else:
+                            job.speed = f"{speed_bps:.0f} B/s"
+
+                        if total_size > 0 and speed_bps > 0:
+                            rem_bytes = total_size - downloaded
+                            rem_sec = int(rem_bytes / speed_bps)
+                            mins, secs = divmod(rem_sec, 60)
+                            hrs, mins = divmod(mins, 60)
+                            if hrs > 0:
+                                job.eta = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+                            else:
+                                job.eta = f"{mins:02d}:{secs:02d}"
+
+                        last_t = now
+                        last_bytes = downloaded
+
+                if job.status != "cancelled":
+                    job.status = "completed"
+                    job.progress = 100.0
+                    job.speed = "0 B/s"
+                    job.eta = "00:00"
+                    job.logs.append(f"[OK] Fallback exitoso. Descargado en: {dest_file}")
+                else:
+                    job.logs.append("[CANCELLED] Descarga cancelada por el usuario.")
+    except Exception as e:
+        if job.status != "cancelled":
+            job.status = "error"
+            job.logs.append(f"[X] Error de ejecución: {str(e)}")
+    finally:
+        job.process = None
 
 # Register Server API Routes
 def init_routes():
@@ -240,7 +433,6 @@ def init_routes():
         if not root_path or not os.path.exists(root_path):
             return web.json_response({"success": False, "error": "El directorio especificado no existe"})
             
-        # Re-discover all model subfolders in new root_path
         abs_root = os.path.abspath(root_path)
         discovered = auto_discover_folders(abs_root)
         save_config(abs_root, discovered)
@@ -274,56 +466,8 @@ def init_routes():
             "matches": match_list
         })
 
-    def run_download_worker(repo_id, filename, target_path):
-        global active_download
-        active_download["is_running"] = True
-        active_download["status"] = "downloading"
-        active_download["logs"] = [f"[START] Descargando {filename} desde {repo_id}...", f"[TARGET] {target_path}"]
-        
-        os.makedirs(target_path, exist_ok=True)
-        
-        env = dict(os.environ)
-        env['HF_HUB_ENABLE_HF_TRANSFER'] = '1'
-        
-        cmd = [sys.executable, '-m', 'huggingface_hub.cli.hf', 'download', repo_id, filename, '--local-dir', target_path]
-        
-        try:
-            process = subprocess.Popen(
-                cmd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
-            active_download["process"] = process
-            
-            for line in process.stdout:
-                line_str = line.strip()
-                if line_str:
-                    active_download["logs"].append(line_str)
-                    if len(active_download["logs"]) > 200:
-                        active_download["logs"] = active_download["logs"][-150:]
-                        
-            process.wait()
-            if process.returncode == 0:
-                active_download["status"] = "completed"
-                active_download["logs"].append("[OK] DESCARGA COMPLETADA CON EXITO!")
-            else:
-                active_download["status"] = "error"
-                active_download["logs"].append(f"[X] La descarga finalizó con código de error {process.returncode}")
-        except Exception as e:
-            active_download["status"] = "error"
-            active_download["logs"].append(f"[X] Error de ejecución: {str(e)}")
-        finally:
-            active_download["is_running"] = False
-
     @routes.post("/hf_superdownloader/download")
     async def download_endpoint(request):
-        global active_download
-        if active_download["is_running"]:
-            return web.json_response({"success": False, "error": "Ya hay una descarga en progreso"})
-            
         data = await request.json()
         repo_id = data.get("repo_id")
         filename = data.get("filename")
@@ -332,22 +476,45 @@ def init_routes():
         if not repo_id or not filename or not target_path:
             return web.json_response({"success": False, "error": "Parámetros incompletos"})
             
-        t = threading.Thread(target=run_download_worker, args=(repo_id, filename, target_path), daemon=True)
+        job_id = str(uuid.uuid4())[:8]
+        job = DownloadJob(job_id, repo_id, filename, target_path)
+        active_downloads[job_id] = job
+
+        t = threading.Thread(target=run_download_worker, args=(job,), daemon=True)
         t.start()
         
-        return web.json_response({"success": True, "message": "Descarga iniciada"})
+        return web.json_response({"success": True, "job_id": job_id, "message": "Descarga iniciada"})
 
     @routes.get("/hf_superdownloader/status")
     async def status_endpoint(request):
-        return web.json_response({
-            "is_running": active_download["is_running"],
-            "status": active_download["status"],
-            "logs": active_download["logs"]
-        })
+        jobs_dict = {jid: job.to_dict() for jid, job in active_downloads.items()}
+        return web.json_response({"jobs": jobs_dict})
+
+    @routes.post("/hf_superdownloader/cancel")
+    async def cancel_endpoint(request):
+        data = await request.json()
+        job_id = data.get("job_id")
+        if job_id in active_downloads:
+            job = active_downloads[job_id]
+            job.status = "cancelled"
+            if job.process:
+                try:
+                    job.process.terminate()
+                except Exception:
+                    pass
+            return web.json_response({"success": True})
+        return web.json_response({"success": False, "error": "Trabajo no encontrado"})
+
+    @routes.post("/hf_superdownloader/clear_completed")
+    async def clear_completed_endpoint(request):
+        to_delete = [jid for jid, job in active_downloads.items() if job.status in ["completed", "error", "cancelled"]]
+        for jid in to_delete:
+            del active_downloads[jid]
+        return web.json_response({"success": True, "cleared": len(to_delete)})
 
 init_routes()
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-print("[HF SuperDownloader] Custom Node backend loaded successfully with ComfyUI Root Auto-Discovery!")
+print("[HF SuperDownloader] Custom Node backend loaded successfully with Multi-Download & ETA support!")
