@@ -115,12 +115,17 @@ def save_config(comfy_root, custom_folders):
         json.dump(data, f, indent=2)
 
 POPULAR_REPOS = [
-    'Kijai/LTX2.3_comfy',
-    'Alissonerdx/BFS-Best-Face-Swap',
+    'Comfy-Org/MiniMax-H3',
     'Comfy-Org/Qwen-Image-Edit_ComfyUI',
     'Comfy-Org/Wan_2.1_ComfyUI_repackaged',
-    'city96/ComfyUI-GGUF',
+    'Comfy-Org/HunyuanVideo_repackaged',
+    'Comfy-Org/mochi_preview_repackaged',
+    'Comfy-Org/cosmos_repackaged',
     'Comfy-Org/Flux.1-Dev-GGUF',
+    'Comfy-Org/FLUX.1-schnell-GGUF',
+    'city96/ComfyUI-GGUF',
+    'Kijai/LTX2.3_comfy',
+    'Alissonerdx/BFS-Best-Face-Swap',
     'stabilityai/stable-diffusion-xl-base-1.0',
     'black-forest-labs/FLUX.1-dev'
 ]
@@ -164,31 +169,44 @@ def norm(s):
     return re.sub(r'[\-_]', '', s.lower())
 
 def parse_hf_url(url_input):
-    url_input = url_input.strip()
+    url_input = url_input.strip(' "\'')
+    # 1. Standard HF URL with /blob/main/, /resolve/main/, or /tree/main/
     m = re.match(r'https?://huggingface\.co/([^/]+/[^/]+)/(?:blob|resolve|tree)/[^/]+/(.+)', url_input)
     if m:
         return m.group(1), m.group(2)
+        
+    # 2. Short HF URL (https://huggingface.co/owner/repo/subfolder/file.ext)
+    m2 = re.match(r'https?://huggingface\.co/([^/]+/[^/]+)/(.+)', url_input)
+    if m2:
+        return m2.group(1), m2.group(2)
+
     return None, None
 
 def search_hf_auto(target_input):
     target_file = target_input.strip(' "\'')
+    
+    # Check if input is a HF URL
     repo_id, filename = parse_hf_url(target_file)
     if repo_id and filename:
         return repo_id, filename, [(repo_id, filename)]
 
+    # Check if input is in format "owner/repo/subfolder/filename.ext"
     if '/' in target_file and not target_file.startswith('http'):
         parts = target_file.split('/')
-        if len(parts) >= 2:
+        if len(parts) >= 3:
             r = parts[0] + '/' + parts[1]
-            f = '/'.join(parts[2:]) if len(parts) > 2 else ""
-            if f:
-                return r, f, [(r, f)]
+            f = '/'.join(parts[2:])
+            return r, f, [(r, f)]
+        elif len(parts) == 2:
+            # owner/repo format without specific filename
+            r = parts[0] + '/' + parts[1]
+            return r, "", [(r, "")]
 
     filename_only = os.path.basename(target_file)
     u_norm = norm(filename_only)
     found_matches = []
     
-    # 1. Check popular repos
+    # 1. Check popular repos first
     for repo in POPULAR_REPOS:
         try:
             tree_url = f'https://huggingface.co/api/models/{repo}/tree/main?recursive=true'
@@ -210,29 +228,42 @@ def search_hf_auto(target_input):
 
     # 2. General Hugging Face API search by tokens
     words = [w for w in re.sub(r'[\._\-]', ' ', filename_only).split() if len(w) > 2 and w.lower() not in ['safetensors', 'ckpt', 'pth', 'bin']]
-    search_query = '+'.join(words[:3]) if words else filename_only
     
-    search_url = f'https://huggingface.co/api/models?search={search_query}&limit=15'
-    try:
-        req = urllib.request.Request(search_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-            for m in data:
-                repo_id_api = m.get('id')
-                try:
-                    tree_url = f'https://huggingface.co/api/models/{repo_id_api}/tree/main?recursive=true'
-                    with urllib.request.urlopen(urllib.request.Request(tree_url, headers={'User-Agent': 'Mozilla/5.0'}), timeout=3) as t_resp:
-                        files_tree = json.loads(t_resp.read().decode())
-                        for item in files_tree:
-                            if item.get('type') == 'file':
-                                path = item.get('path', '')
-                                p_norm = norm(os.path.basename(path))
-                                if u_norm == p_norm or u_norm in norm(path):
-                                    found_matches.append((repo_id_api, path))
-                except Exception:
-                    pass
-    except Exception as e:
-        print(f'[HF SuperDownloader] Error en API search: {e}')
+    # Try combined query first, then individual key terms (e.g. minimax, hunyuan, qwen, ltx)
+    queries = []
+    if words:
+        queries.append('+'.join(words[:3]))
+        for w in words:
+            if len(w) >= 4 and w.lower() not in queries:
+                queries.append(w)
+    else:
+        queries.append(filename_only)
+        
+    for search_query in queries:
+        search_url = f'https://huggingface.co/api/models?search={search_query}&limit=15'
+        try:
+            req = urllib.request.Request(search_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                data = json.loads(resp.read().decode())
+                for m in data:
+                    repo_id_api = m.get('id')
+                    try:
+                        tree_url = f'https://huggingface.co/api/models/{repo_id_api}/tree/main?recursive=true'
+                        with urllib.request.urlopen(urllib.request.Request(tree_url, headers={'User-Agent': 'Mozilla/5.0'}), timeout=3) as t_resp:
+                            files_tree = json.loads(t_resp.read().decode())
+                            for item in files_tree:
+                                if item.get('type') == 'file':
+                                    path = item.get('path', '')
+                                    p_norm = norm(os.path.basename(path))
+                                    if u_norm == p_norm or u_norm in norm(path):
+                                        found_matches.append((repo_id_api, path))
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f'[HF SuperDownloader] Error en API search: {e}')
+            
+        if found_matches:
+            break
         
     if found_matches:
         unique = list(dict.fromkeys(found_matches))
