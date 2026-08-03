@@ -182,31 +182,45 @@ def parse_hf_url(url_input):
 
     return None, None
 
+KNOWN_COMFY_CATEGORIES = [
+    'text_encoders', 'loras', 'checkpoints', 'vae', 'controlnet', 
+    'clip', 'unet', 'upscale_models', 'embeddings', 'diffusion_models',
+    'hypernetworks', 'clip_vision', 'style_models', 'photomaker'
+]
+
 def search_hf_auto(target_input):
     target_file = target_input.strip(' "\'')
-    
-    # Check if input is a HF URL
+    suggested_category = None
+
+    # Check if input starts with a known ComfyUI category prefix (e.g. text_encoders/file.safetensors)
+    if '/' in target_file and not target_file.startswith('http'):
+        parts = target_file.split('/')
+        first_part = parts[0].lower().replace(' ', '_')
+        if first_part in KNOWN_COMFY_CATEGORIES:
+            suggested_category = first_part
+            target_file = '/'.join(parts[1:])  # Strip category prefix for searching
+
+    # 1. Check if input is a HF URL
     repo_id, filename = parse_hf_url(target_file)
     if repo_id and filename:
-        return repo_id, filename, [(repo_id, filename)]
+        return repo_id, filename, [(repo_id, filename)], suggested_category
 
-    # Check if input is in format "owner/repo/subfolder/filename.ext"
+    # 2. Check if input is in format "owner/repo/subfolder/filename.ext"
     if '/' in target_file and not target_file.startswith('http'):
         parts = target_file.split('/')
         if len(parts) >= 3:
             r = parts[0] + '/' + parts[1]
             f = '/'.join(parts[2:])
-            return r, f, [(r, f)]
-        elif len(parts) == 2:
-            # owner/repo format without specific filename
+            return r, f, [(r, f)], suggested_category
+        elif len(parts) == 2 and not suggested_category:
             r = parts[0] + '/' + parts[1]
-            return r, "", [(r, "")]
+            return r, "", [(r, "")], suggested_category
 
     filename_only = os.path.basename(target_file)
     u_norm = norm(filename_only)
     found_matches = []
     
-    # 1. Check popular repos first
+    # 3. Check popular repos first
     for repo in POPULAR_REPOS:
         try:
             tree_url = f'https://huggingface.co/api/models/{repo}/tree/main?recursive=true'
@@ -217,19 +231,18 @@ def search_hf_auto(target_input):
                     if item.get('type') == 'file':
                         path = item.get('path', '')
                         p_norm = norm(os.path.basename(path))
-                        if u_norm == p_norm or u_norm in norm(path):
+                        if u_norm == p_norm or u_norm in norm(path) or norm(path) in u_norm:
                             found_matches.append((repo, path))
         except Exception:
             pass
             
     if found_matches:
         unique = list(dict.fromkeys(found_matches))
-        return unique[0][0], unique[0][1], unique
+        return unique[0][0], unique[0][1], unique, suggested_category
 
-    # 2. General Hugging Face API search by tokens
+    # 4. General Hugging Face API search by tokens
     words = [w for w in re.sub(r'[\._\-]', ' ', filename_only).split() if len(w) > 2 and w.lower() not in ['safetensors', 'ckpt', 'pth', 'bin']]
     
-    # Try combined query first, then individual key terms (e.g. minimax, hunyuan, qwen, ltx)
     queries = []
     if words:
         queries.append('+'.join(words[:3]))
@@ -267,9 +280,9 @@ def search_hf_auto(target_input):
         
     if found_matches:
         unique = list(dict.fromkeys(found_matches))
-        return unique[0][0], unique[0][1], unique
+        return unique[0][0], unique[0][1], unique, suggested_category
 
-    return None, None, []
+    return None, None, [], suggested_category
 
 def run_download_worker(job):
     job.status = "downloading"
@@ -485,7 +498,7 @@ def init_routes():
         if not query:
             return web.json_response({"success": False, "error": "Búsqueda vacía"})
 
-        repo_id, filename, matches = search_hf_auto(query)
+        repo_id, filename, matches, suggested_category = search_hf_auto(query)
         if not repo_id or not filename:
             return web.json_response({"success": False, "error": f"No se encontró el archivo '{query}' en Hugging Face"})
 
@@ -494,6 +507,7 @@ def init_routes():
             "success": True,
             "repo_id": repo_id,
             "filename": filename,
+            "suggested_category": suggested_category,
             "matches": match_list
         })
 

@@ -690,6 +690,22 @@ function createModal() {
                 resultBox.style.display = "block";
                 resultBox.style.color = "#2ecc71";
                 resultBox.innerHTML = `${t("found")} <b>${res.repo_id}</b> &rarr; <code>${res.filename}</code>`;
+
+                // Auto-select folder if suggested_category was detected from prefix
+                if (res.suggested_category && allLoadedFolders && allLoadedFolders.length > 0) {
+                    const cleanCat = res.suggested_category.toLowerCase();
+                    const matchedFolder = allLoadedFolders.find(f => 
+                        f.id.toLowerCase() === cleanCat || 
+                        f.name.toLowerCase().replace(/\s+/g, '_') === cleanCat ||
+                        f.id.toLowerCase().includes(cleanCat)
+                    );
+                    if (matchedFolder) {
+                        const folderInput = modal.querySelector("#hf-folder-input");
+                        if (folderInput) {
+                            folderInput.value = `${matchedFolder.name} (${matchedFolder.path})`;
+                        }
+                    }
+                }
             } else {
                 currentResolved = null;
                 resultBox.style.display = "block";
