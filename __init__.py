@@ -360,59 +360,128 @@ def run_download_worker(job):
             file_url = f"{endpoint}/{job.repo_id}/resolve/main/{job.filename}"
             dest_file = os.path.join(job.target_path, os.path.basename(job.filename))
 
-            req = urllib.request.Request(file_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req) as response, open(dest_file, 'wb') as out_file:
-                total_size = int(response.info().get('Content-Length', 0))
-                job.total_bytes = total_size
-                downloaded = 0
-                chunk_size = 128 * 1024
-                start_t = time.time()
-                last_t = start_t
-                last_bytes = 0
+            import threading
+            import concurrent.futures
 
-                while job.status != "cancelled":
-                    buffer = response.read(chunk_size)
-                    if not buffer:
-                        break
-                    out_file.write(buffer)
-                    downloaded += len(buffer)
-                    job.downloaded_bytes = downloaded
+            req = urllib.request.Request(file_url, headers={"User-Agent": "Mozilla/5.0", "Range": "bytes=0-0"})
+            supports_ranges = False
+            total_size = 0
+            
+            try:
+                with urllib.request.urlopen(req) as res:
+                    cr = res.headers.get("Content-Range")
+                    if cr and cr.startswith("bytes"):
+                        total_size = int(cr.split("/")[-1])
+                        supports_ranges = True
+                    else:
+                        total_size = int(res.headers.get("Content-Length", 0))
+            except Exception:
+                req.method = "HEAD"
+                try:
+                    del req.headers["Range"]
+                except:
+                    pass
+                try:
+                    with urllib.request.urlopen(req) as res:
+                        total_size = int(res.headers.get("Content-Length", 0))
+                except Exception:
+                    pass
+
+            job.total_bytes = total_size
+            downloaded_bytes = [0]
+            downloaded_lock = threading.Lock()
+            start_t = time.time()
+            last_t = [start_t]
+            last_bytes = [0]
+
+            def update_progress(chunk_size):
+                if job.status == "cancelled":
+                    return
+                with downloaded_lock:
+                    downloaded_bytes[0] += chunk_size
+                    d = downloaded_bytes[0]
+                    job.downloaded_bytes = d
                     now = time.time()
-
                     if total_size > 0:
-                        job.progress = (downloaded / total_size) * 100
-
-                    if now - last_t >= 0.5:
-                        dt = now - last_t
-                        db = downloaded - last_bytes
+                        job.progress = (d / total_size) * 100
+                    
+                    if now - last_t[0] >= 0.5:
+                        dt = now - last_t[0]
+                        db = d - last_bytes[0]
                         speed_bps = db / dt if dt > 0 else 0
+                        
                         if speed_bps > 1024 * 1024:
                             job.speed = f"{speed_bps / (1024*1024):.2f} MB/s"
                         elif speed_bps > 1024:
                             job.speed = f"{speed_bps / 1024:.1f} KB/s"
                         else:
                             job.speed = f"{speed_bps:.0f} B/s"
-
+                            
                         if total_size > 0 and speed_bps > 0:
-                            rem_bytes = total_size - downloaded
+                            rem_bytes = total_size - d
                             rem_sec = int(rem_bytes / speed_bps)
                             mins, secs = divmod(rem_sec, 60)
                             hrs, mins = divmod(mins, 60)
-                            if hrs > 0:
-                                job.eta = f"{hrs:02d}:{mins:02d}:{secs:02d}"
-                            else:
-                                job.eta = f"{mins:02d}:{secs:02d}"
+                            job.eta = f"{hrs:02d}:{mins:02d}:{secs:02d}" if hrs > 0 else f"{mins:02d}:{secs:02d}"
+                            
+                        last_t[0] = now
+                        last_bytes[0] = d
 
-                        last_t = now
-                        last_bytes = downloaded
+            if total_size > 0 and supports_ranges:
+                job.logs.append(f"[*] Modo Fallback Multi-hilo Activado (Total: {total_size / (1024*1024):.1f} MB)")
+                with open(dest_file, "wb") as f:
+                    f.truncate(total_size)
+                
+                chunk_size = 16 * 1024 * 1024
+                num_threads = 8
+                ranges = []
+                for i in range(0, total_size, chunk_size):
+                    ranges.append((i, min(i + chunk_size - 1, total_size - 1)))
+                
+                def download_chunk(r, retries=3):
+                    start, end = r
+                    for attempt in range(retries):
+                        if job.status == "cancelled":
+                            return
+                        try:
+                            req_chunk = urllib.request.Request(file_url, headers={"User-Agent": "Mozilla/5.0", "Range": f"bytes={start}-{end}"})
+                            with urllib.request.urlopen(req_chunk, timeout=15) as response:
+                                if response.status != 206:
+                                    raise Exception("No 206 status")
+                                with open(dest_file, "r+b") as f:
+                                    f.seek(start)
+                                    while job.status != "cancelled":
+                                        buf = response.read(128 * 1024)
+                                        if not buf:
+                                            break
+                                        f.write(buf)
+                                        update_progress(len(buf))
+                                        start += len(buf)
+                            return
+                        except Exception as e:
+                            time.sleep(1)
 
-                if job.status != "cancelled":
-                    job.status = "completed"
-                    job.progress = 100.0
-                    job.speed = "0 B/s"
-                    job.eta = "00:00"
-                    job.logs.append(f"[OK] Fallback exitoso. Descargado en: {dest_file}")
-                else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+                    for r in ranges:
+                        executor.submit(download_chunk, r)
+            else:
+                job.logs.append(f"[*] Modo Fallback 1-hilo Activado (Servidor no soporta particiones)")
+                req = urllib.request.Request(file_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req) as response, open(dest_file, 'wb') as out_file:
+                    while job.status != "cancelled":
+                        buf = response.read(128 * 1024)
+                        if not buf:
+                            break
+                        out_file.write(buf)
+                        update_progress(len(buf))
+
+            if job.status != "cancelled":
+                job.status = "completed"
+                job.progress = 100.0
+                job.speed = "0 B/s"
+                job.eta = "00:00"
+                job.logs.append(f"[OK] Fallback exitoso. Descargado en: {dest_file}")
+            else:
                     job.logs.append("[CANCELLED] Descarga cancelada por el usuario.")
     except Exception as e:
         if job.status != "cancelled":
